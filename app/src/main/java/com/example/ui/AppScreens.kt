@@ -1,0 +1,3136 @@
+package com.example.ui
+
+import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import com.example.data.entity.*
+import com.example.data.importer.ParsedImportPreview
+import com.example.ui.components.*
+import com.example.ui.theme.*
+
+// ====================================================================
+// 1. APP HEADER WITH RBAC BADGE & LOGOUT & USER SWITCHER
+// ====================================================================
+
+@Composable
+fun AppHeader(
+    currentUser: UserEntity?,
+    allUsers: List<UserEntity>,
+    oversights: List<OversightEntity>,
+    selectedOversightId: Long?,
+    onSwitchUser: (UserEntity) -> Unit,
+    onSelectOversight: (Long) -> Unit,
+    onLogout: () -> Unit
+) {
+    var showUserMenu by remember { mutableStateOf(false) }
+    var showOversightMenu by remember { mutableStateOf(false) }
+    var showLogoutConfirm by remember { mutableStateOf(false) }
+
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 4.dp,
+        shadowElevation = 3.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Brand Badge & Plant Name
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(IndustrialNavy),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PrecisionManufacturing,
+                            contentDescription = "Ghadir Steel Logo",
+                            tint = IndustrialAmber,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "مجتمع فولاد غدیر نی‌ریز",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "کارخانه احیای مستقیم • اورهال سالیانه",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // User Role Pill & Logout Action
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box {
+                        Surface(
+                            onClick = { showUserMenu = true },
+                            shape = RoundedCornerShape(20.dp),
+                            color = when (currentUser?.role) {
+                                "admin" -> IndustrialNavy.copy(alpha = 0.12f)
+                                "planner" -> IndustrialPurple.copy(alpha = 0.12f)
+                                "unit_head" -> IndustrialEmerald.copy(alpha = 0.12f)
+                                else -> IndustrialAmber.copy(alpha = 0.15f)
+                            },
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            when (currentUser?.role) {
+                                                "admin" -> IndustrialNavy
+                                                "planner" -> IndustrialPurple
+                                                "unit_head" -> IndustrialEmerald
+                                                else -> IndustrialAmber
+                                            }
+                                        )
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Column {
+                                    Text(
+                                        text = currentUser?.name ?: "کاربر",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = when (currentUser?.role) {
+                                            "admin" -> "مدیر ارشد"
+                                            "planner" -> "برنامه‌ریز"
+                                            "unit_head" -> "رئیس واحد (${currentUser.unit})"
+                                            "supervisor" -> "ناظر (${currentUser.unit})"
+                                            else -> currentUser?.role ?: ""
+                                        },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = "Switch User",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+
+                        DropdownMenu(
+                            expanded = showUserMenu,
+                            onDismissRequest = { showUserMenu = false }
+                        ) {
+                            Text(
+                                text = "تغییر نقش کاربری جهت تست RBAC:",
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Divider()
+                            allUsers.forEach { user ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(user.name, fontWeight = FontWeight.SemiBold)
+                                            Text(
+                                                text = "${getPersianRole(user.role)} • واحد: ${user.unit ?: "عمومی"}",
+                                                fontSize = 11.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = if (user.id == currentUser?.id) Icons.Default.CheckCircle else Icons.Default.Person,
+                                            contentDescription = null,
+                                            tint = if (user.id == currentUser?.id) IndustrialEmerald else Color.Gray
+                                        )
+                                    },
+                                    onClick = {
+                                        onSwitchUser(user)
+                                        showUserMenu = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    IconButton(
+                        onClick = { showLogoutConfirm = true },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Logout,
+                            contentDescription = "خروج از حساب",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (showLogoutConfirm) {
+        AlertDialog(
+            onDismissRequest = { showLogoutConfirm = false },
+            title = { Text("خروج از حساب کاربری", fontWeight = FontWeight.Bold) },
+            text = { Text("آیا مطمئن هستید که می‌خواهید از حساب کاربری خارج شوید؟ برای ورود بعدی نیاز به نام کاربری و کلمه عبور خواهید داشت.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showLogoutConfirm = false
+                        onLogout()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("خروج قطعی")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutConfirm = false }) {
+                    Text("انصراف")
+                }
+            }
+        )
+    }
+}
+
+// ====================================================================
+// 2. DASHBOARD TAB WITH ROLE-SPECIFIC ANALYTICS & KPIS
+// ====================================================================
+
+@Composable
+fun DashboardTab(
+    kpis: DashboardKpis,
+    unitAnalytics: UnitAnalytics,
+    areaAnalyticsList: List<AreaAnalytics>,
+    unitComparisons: List<UnitProgressComparison>,
+    timelinePoints: List<TimelineProgressPoint>,
+    overallPlannedProgress: Float,
+    overallActualProgress: Float,
+    selectedAreaName: String,
+    selectedUnitName: String,
+    currentUser: UserEntity?,
+    oversight: OversightEntity?,
+    allUsers: List<UserEntity>,
+    rawItems: List<OversightItemEntity> = emptyList(),
+    onSelectArea: (String) -> Unit,
+    onSelectUnit: (String) -> Unit,
+    onNavigateToWbs: () -> Unit,
+    onNavigateToEodSync: () -> Unit,
+    onNavigateToProcurement: () -> Unit,
+    onItemClickForDailyUpdate: (OversightItemEntity) -> Unit = {}
+) {
+    // Current role perspective (defaults to user's real role, but can be switched to preview)
+    var selectedRolePerspective by remember(currentUser?.role) {
+        mutableStateOf(currentUser?.role ?: "admin")
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Perspective Switcher Bar
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Badge,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "نمای داشبورد بر اساس نقش:",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                val rolesList = listOf(
+                    Triple("admin", "مدیر پروژه", Icons.Default.Dashboard),
+                    Triple("supervisor", "سرپرست کارگاه", Icons.Default.Engineering),
+                    Triple("planner", "کنترل پروژه", Icons.Default.Timeline),
+                    Triple("unit_head", "رئیس واحد", Icons.Default.Analytics)
+                )
+
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    items(rolesList) { (roleKey, roleLabel, roleIcon) ->
+                        val isSelected = selectedRolePerspective == roleKey
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { selectedRolePerspective = roleKey },
+                            label = { Text(roleLabel, fontSize = 10.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = roleIcon,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            ),
+                            modifier = Modifier.height(30.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Conditional UI Dashboard based on selected Role Perspective
+        Box(modifier = Modifier.weight(1f)) {
+            when (selectedRolePerspective) {
+                "supervisor" -> {
+                    ShopFloorSupervisorDashboard(
+                        currentUser = currentUser ?: UserEntity(name = "مهندس بقری", role = "supervisor", unit = "مکانیک", email = ""),
+                        kpis = kpis,
+                        unitAnalytics = unitAnalytics,
+                        rawItems = rawItems,
+                        oversight = oversight,
+                        onNavigateToWbs = onNavigateToWbs,
+                        onNavigateToFastUpdate = onNavigateToEodSync,
+                        onNavigateToProcurement = onNavigateToProcurement,
+                        onItemClickForUpdate = onItemClickForDailyUpdate
+                    )
+                }
+                "planner" -> {
+                    PlannerControlDashboard(
+                        kpis = kpis,
+                        unitAnalytics = unitAnalytics,
+                        areaAnalyticsList = areaAnalyticsList,
+                        unitComparisons = unitComparisons,
+                        timelinePoints = timelinePoints,
+                        overallPlannedProgress = overallPlannedProgress,
+                        overallActualProgress = overallActualProgress,
+                        oversight = oversight,
+                        onNavigateToWbs = onNavigateToWbs,
+                        onNavigateToEodSync = onNavigateToEodSync,
+                        onNavigateToSessions = {}
+                    )
+                }
+                "unit_head" -> {
+                    UnitHeadExecutiveDashboard(
+                        currentUser = currentUser ?: UserEntity(name = "مهندس اله بخش", role = "unit_head", unit = "مکانیک", email = ""),
+                        kpis = kpis,
+                        unitAnalytics = unitAnalytics,
+                        areaAnalyticsList = areaAnalyticsList,
+                        allUsers = allUsers,
+                        oversight = oversight,
+                        onNavigateToWbs = onNavigateToWbs,
+                        onNavigateToEodSync = onNavigateToEodSync,
+                        onNavigateToProcurement = onNavigateToProcurement
+                    )
+                }
+                else -> {
+                    // Default: Project Manager / Admin Dashboard
+                    ProjectManagerExecutiveDashboard(
+                        kpis = kpis,
+                        unitAnalytics = unitAnalytics,
+                        areaAnalyticsList = areaAnalyticsList,
+                        unitComparisons = unitComparisons,
+                        timelinePoints = timelinePoints,
+                        overallPlannedProgress = overallPlannedProgress,
+                        overallActualProgress = overallActualProgress,
+                        selectedAreaName = selectedAreaName,
+                        selectedUnitName = selectedUnitName,
+                        currentUser = currentUser,
+                        oversight = oversight,
+                        allUsers = allUsers,
+                        onSelectArea = onSelectArea,
+                        onSelectUnit = onSelectUnit
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ProjectManagerExecutiveDashboard(
+    kpis: DashboardKpis,
+    unitAnalytics: UnitAnalytics,
+    areaAnalyticsList: List<AreaAnalytics>,
+    unitComparisons: List<UnitProgressComparison>,
+    timelinePoints: List<TimelineProgressPoint>,
+    overallPlannedProgress: Float,
+    overallActualProgress: Float,
+    selectedAreaName: String,
+    selectedUnitName: String,
+    currentUser: UserEntity?,
+    oversight: OversightEntity?,
+    allUsers: List<UserEntity>,
+    onSelectArea: (String) -> Unit,
+    onSelectUnit: (String) -> Unit
+) {
+    var activeAreaTab by remember(selectedAreaName) { mutableStateOf(selectedAreaName) }
+    var activeUnitTab by remember(selectedUnitName) { mutableStateOf(selectedUnitName) }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        // Hero Card
+        item {
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = IndustrialNavy,
+                shadowElevation = 4.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = IndustrialAmber.copy(alpha = 0.2f)
+                            ) {
+                                Text(
+                                    text = "وضعیت: در حال اجرای اورهال سالیانه (نمای مدیر پروژه)",
+                                    color = IndustrialAmber,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = oversight?.title ?: "برنامه جامع اورهال سالیانه مجتمع فولاد غدیر نی‌ریز",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+
+                        // Progress Gauge
+                        Box(contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(
+                                progress = { kpis.overallProgressPercent / 100f },
+                                modifier = Modifier.size(62.dp),
+                                color = IndustrialAmber,
+                                trackColor = Color.White.copy(alpha = 0.2f),
+                                strokeWidth = 6.dp
+                            )
+                            Text(
+                                text = "${kpis.overallProgressPercent}%",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Divider(color = Color.White.copy(alpha = 0.15f))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text("نفرات فعال ثبت‌شده", color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
+                            Text("${kpis.totalManpowerToday} نفر", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        }
+                        Column {
+                            Text("کارکرد صرف‌شده", color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
+                            Text("${kpis.totalActualHours.toInt()} ساعت", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        }
+                        Column {
+                            Text("کل فعالیت‌های WBS", color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
+                            Text("${kpis.totalItems} تسک", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        // 1. DASHBOARD AND CHARTS FOR MAIN AREAS (Core Area, MHU, WTP)
+        item {
+            AreaExecutionDashboardCard(
+                areaList = areaAnalyticsList,
+                selectedAreaKey = activeAreaTab,
+                onSelectArea = {
+                    activeAreaTab = it
+                    onSelectArea(it)
+                }
+            )
+        }
+
+        // 2. DASHBOARD AND CHARTS FOR MAIN REPAIR UNITS (مکانیک، برق، ابزاردقیق و اتوماسیون، نسوز)
+        item {
+            UnitExecutionDashboardCard(
+                unitAnalytics = unitAnalytics,
+                allUsers = allUsers,
+                selectedUnitName = activeUnitTab,
+                onSelectUnit = {
+                    activeUnitTab = it
+                    onSelectUnit(it)
+                }
+            )
+        }
+
+        // 3. OVERHAUL ORGANIZATIONAL PERSONNEL ROSTER
+        item {
+            PersonnelDirectoryCard(allUsers = allUsers)
+        }
+
+        // 4. COMPARATIVE PROGRESS CHART ACROSS ALL UNITS & S-CURVE
+        item {
+            ProgressComparisonDashboardCard(
+                unitComparisons = unitComparisons,
+                timelinePoints = timelinePoints,
+                overallPlannedProgress = overallPlannedProgress,
+                overallActualProgress = overallActualProgress,
+                onUnitClick = { unitComp ->
+                    activeUnitTab = unitComp.unitName
+                    onSelectUnit(unitComp.unitName)
+                }
+            )
+        }
+
+        // 5. STATUS BREAKDOWN CARDS
+        item {
+            Text(
+                text = "تفکیک وضعیت کل فعالیت‌های اورهال",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                StatusKpiCard(
+                    title = "تکمیل شده",
+                    count = kpis.completedCount,
+                    color = IndustrialEmerald,
+                    icon = Icons.Default.CheckCircle,
+                    modifier = Modifier.weight(1f)
+                )
+                StatusKpiCard(
+                    title = "در حال اجرا",
+                    count = kpis.inProgressCount,
+                    color = IndustrialSteelBlue,
+                    icon = Icons.Default.Engineering,
+                    modifier = Modifier.weight(1f)
+                )
+                StatusKpiCard(
+                    title = "دارای مانع",
+                    count = kpis.blockedCount,
+                    color = MaterialTheme.colorScheme.error,
+                    icon = Icons.Default.ReportProblem,
+                    modifier = Modifier.weight(1f)
+                )
+                StatusKpiCard(
+                    title = "در انتظار",
+                    count = kpis.pendingCount,
+                    color = Color.Gray,
+                    icon = Icons.Default.Schedule,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        // 6. CRITICAL BOTTLENECKS SECTION
+        if (kpis.criticalBottlenecks.isNotEmpty()) {
+            item {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "موانع و گلوگاه‌های بحرانی اورهال (${kpis.criticalBottlenecks.size})",
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        kpis.criticalBottlenecks.forEach { task ->
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(task.title, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        Text(
+                                            text = "ناحیه: ${task.generalArea} • واحد: ${task.executiveUnit} • تجهیز: ${task.equipmentName} • علت: ${task.issues.ifBlank { "توقف اجرایی یا کمبود متریال" }}",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ====================================================================
+// 2.1 DASHBOARD & CHARTS FOR MAIN AREAS (Core Area, MHU, WTP)
+// ====================================================================
+
+@Composable
+fun AreaExecutionDashboardCard(
+    areaList: List<AreaAnalytics>,
+    selectedAreaKey: String,
+    onSelectArea: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val currentArea = areaList.firstOrNull { it.areaKey == selectedAreaKey }
+        ?: areaList.firstOrNull()
+        ?: AreaAnalytics(areaKey = selectedAreaKey, areaTitle = selectedAreaKey)
+
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+        shadowElevation = 3.dp,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = IndustrialNavy.copy(alpha = 0.12f),
+                        modifier = Modifier.size(42.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.LocationCity,
+                                contentDescription = null,
+                                tint = IndustrialNavy,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "داشبورد و نمودار پیشرفت نواحی اصلی کارخانه",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Core Area • MHU • WTP",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // Variance Badge
+                val isPositive = currentArea.variance >= 0f
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (isPositive) StatusCompletedBg else StatusBlockedBg
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (isPositive) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                            contentDescription = null,
+                            tint = if (isPositive) StatusCompleted else StatusBlocked,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = if (isPositive) "+${String.format("%.1f", currentArea.variance)}%" else "${String.format("%.1f", currentArea.variance)}%",
+                            color = if (isPositive) StatusCompleted else StatusBlocked,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Area Selection Chips
+            val areaTabs = listOf(
+                Pair("Core Area", "کوره و احیا (Core Area)"),
+                Pair("MHU", "انتقال مواد (MHU)"),
+                Pair("WTP", "تصفیه آب (WTP)")
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                areaTabs.forEach { (key, title) ->
+                    val isSelected = selectedAreaKey == key
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (isSelected) IndustrialNavy else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { onSelectArea(key) }
+                    ) {
+                        Box(
+                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = title,
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Main Area Execution Card details
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    // Header of current Area
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = currentArea.areaTitle.ifBlank { currentArea.areaKey },
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                text = "تعداد ${currentArea.totalTasks} فعالیت WBS در این ناحیه تعریف شده است",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = "${String.format("%.1f", currentArea.actualProgress)}%",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp,
+                                color = IndustrialNavy
+                            )
+                            Text(
+                                text = "برنامه: ${String.format("%.1f", currentArea.plannedProgress)}%",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Progress Comparative Bar
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("پیشرفت واقعی (Actual)", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = IndustrialNavy)
+                            Text("${String.format("%.1f", currentArea.actualProgress)}%", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = IndustrialNavy)
+                        }
+                        Spacer(modifier = Modifier.height(3.dp))
+                        LinearProgressIndicator(
+                            progress = { (currentArea.actualProgress / 100f).coerceIn(0f, 1f) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                            color = if (currentArea.actualProgress >= currentArea.plannedProgress) IndustrialEmerald else IndustrialAmber,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("برنامه زمان‌بندی (Planned)", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("${String.format("%.1f", currentArea.plannedProgress)}%", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Spacer(modifier = Modifier.height(3.dp))
+                        LinearProgressIndicator(
+                            progress = { (currentArea.plannedProgress / 100f).coerceIn(0f, 1f) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(5.dp)
+                                .clip(RoundedCornerShape(3.dp)),
+                            color = IndustrialSteelBlue,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Status & Resource Mini Strip
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        StatusMiniBox(label = "تکمیل", count = currentArea.completedTasks, color = IndustrialEmerald, modifier = Modifier.weight(1f))
+                        StatusMiniBox(label = "در حال اجرا", count = currentArea.inProgressTasks, color = IndustrialSteelBlue, modifier = Modifier.weight(1f))
+                        StatusMiniBox(label = "مانع‌دار", count = currentArea.blockedTasks, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
+                        StatusMiniBox(label = "نفر فعال", count = currentArea.totalManpower, color = IndustrialPurple, modifier = Modifier.weight(1f))
+                    }
+
+                    // Progress breakdown across repair units in this area
+                    if (currentArea.unitBreakdown.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "پیشرفت به تفکیک واحدهای تعمیراتی در این ناحیه:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        currentArea.unitBreakdown.forEach { (unit, prog) ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = unit,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.width(110.dp)
+                                )
+                                LinearProgressIndicator(
+                                    progress = { (prog / 100f).coerceIn(0f, 1f) },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(6.dp)
+                                        .clip(RoundedCornerShape(3.dp)),
+                                    color = when {
+                                        unit.contains("مکانیک") -> IndustrialNavy
+                                        unit.contains("برق") -> IndustrialAmber
+                                        unit.contains("ابزار") || unit.contains("اتوماسیون") -> IndustrialSteelBlue
+                                        unit.contains("نسوز") -> IndustrialBurgundy
+                                        else -> IndustrialEmerald
+                                    },
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "$prog%",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.width(36.dp),
+                                    textAlign = TextAlign.End
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ====================================================================
+// 2.2 DASHBOARD & CHARTS FOR MAIN REPAIR UNITS
+// ====================================================================
+
+@Composable
+fun UnitExecutionDashboardCard(
+    unitAnalytics: UnitAnalytics,
+    allUsers: List<UserEntity>,
+    selectedUnitName: String,
+    onSelectUnit: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val unitList = listOf(
+        "مکانیک",
+        "برق",
+        "ابزاردقیق و اتوماسیون",
+        "نسوز",
+        "انرژی و سیالات",
+        "بازرسی فنی"
+    )
+
+    val unitHeadMap = mapOf(
+        "مکانیک" to Pair("مهندس اله بخش", "رئیس واحد مکانیک"),
+        "برق" to Pair("مهندس یادگار", "رئیس واحد برق"),
+        "ابزاردقیق و اتوماسیون" to Pair("مهندس ریحانی", "رئیس واحد ابزاردقیق و اتوماسیون"),
+        "نسوز" to Pair("مهندس یاراحمدی", "سرپرست و ناظر نسوز"),
+        "انرژی و سیالات" to Pair("مهندس ضیغمی", "کارشناس و ناظر سیالات (WTP)"),
+        "بازرسی فنی" to Pair("مهندس خاکی", "کارشناس بازرسی فنی")
+    )
+
+    val unitSupervisorsMap = mapOf(
+        "مکانیک" to listOf("مهندس بقری", "مهندس فرخ", "مهندس شجاعی فرد", "مهندس مبارکی"),
+        "برق" to listOf("مهندس البرزی"),
+        "ابزاردقیق و اتوماسیون" to listOf("مهندس دمیری"),
+        "نسوز" to listOf("تیم تخصصی نسوزکاری و آجرچینی"),
+        "انرژی و سیالات" to listOf("تیم پایش آب صنعتی و کلاریفایر"),
+        "بازرسی فنی" to listOf("تیم بازرسی ضخامت‌سنجی و NDT")
+    )
+
+    val currentHead = unitHeadMap[selectedUnitName] ?: Pair("مسئول واحد", "رئیس واحد")
+    val currentSupervisors = unitSupervisorsMap[selectedUnitName] ?: emptyList()
+
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+        shadowElevation = 3.dp,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = IndustrialEmerald.copy(alpha = 0.12f),
+                        modifier = Modifier.size(42.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Engineering,
+                                contentDescription = null,
+                                tint = IndustrialEmerald,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "داشبورد و نمودار واحدهای تعمیراتی اصلی",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "مکانیک • برق • ابزاردقیق و اتوماسیون • نسوز",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // SPI Performance badge
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (unitAnalytics.spi >= 1.0f) StatusCompletedBg else if (unitAnalytics.spi >= 0.85f) IndustrialAmber.copy(alpha = 0.15f) else StatusBlockedBg
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "SPI: ${String.format("%.2f", unitAnalytics.spi)}",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = if (unitAnalytics.spi >= 1.0f) StatusCompleted else if (unitAnalytics.spi >= 0.85f) IndustrialAmberDark else StatusBlocked
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Unit Selector Scrollable Row / Grid
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(unitList) { unitName ->
+                    val isSelected = selectedUnitName == unitName
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (isSelected) IndustrialEmerald else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.clickable { onSelectUnit(unitName) }
+                    ) {
+                        Box(
+                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = unitName,
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Unit Detail Card
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    // Unit Head & Team Info
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = IndustrialEmerald.copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = currentHead.second,
+                                        color = IndustrialEmerald,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = currentHead.first,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                            }
+
+                            if (currentSupervisors.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "کارشناسان و ناظرین: ${currentSupervisors.joinToString("، ")}",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = "${unitAnalytics.progressPercentage}%",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp,
+                                color = IndustrialEmerald
+                            )
+                            Text(
+                                text = "برنامه: ${String.format("%.1f", unitAnalytics.plannedProgress)}%",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Progress Comparison Bar
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("پیشرفت واقعی واحد $selectedUnitName", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = IndustrialEmerald)
+                            Text("${unitAnalytics.progressPercentage}%", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = IndustrialEmerald)
+                        }
+                        Spacer(modifier = Modifier.height(3.dp))
+                        LinearProgressIndicator(
+                            progress = { (unitAnalytics.progressPercentage / 100f).coerceIn(0f, 1f) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                            color = if (unitAnalytics.progressPercentage >= unitAnalytics.plannedProgress) IndustrialEmerald else IndustrialAmber,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("برنامه زمان‌بندی (Planned)", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("${String.format("%.1f", unitAnalytics.plannedProgress)}%", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Spacer(modifier = Modifier.height(3.dp))
+                        LinearProgressIndicator(
+                            progress = { (unitAnalytics.plannedProgress / 100f).coerceIn(0f, 1f) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(5.dp)
+                                .clip(RoundedCornerShape(3.dp)),
+                            color = IndustrialSteelBlue,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Status & Resource Mini Strip
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        StatusMiniBox(label = "کل فعالیت‌ها", count = unitAnalytics.totalTasks, color = IndustrialNavy, modifier = Modifier.weight(1f))
+                        StatusMiniBox(label = "تکمیل", count = unitAnalytics.completedTasks, color = IndustrialEmerald, modifier = Modifier.weight(1f))
+                        StatusMiniBox(label = "در حال اجرا", count = unitAnalytics.inProgressTasks, color = IndustrialSteelBlue, modifier = Modifier.weight(1f))
+                        StatusMiniBox(label = "نفرات فعال", count = unitAnalytics.totalManpower, color = IndustrialAmberDark, modifier = Modifier.weight(1f))
+                    }
+
+                    // Progress breakdown across areas (Core Area, MHU, WTP)
+                    if (unitAnalytics.areaBreakdown.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "پیشرفت واحد $selectedUnitName در نواحی کارخانه:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        unitAnalytics.areaBreakdown.forEach { (area, prog) ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = area,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.width(110.dp)
+                                )
+                                LinearProgressIndicator(
+                                    progress = { (prog / 100f).coerceIn(0f, 1f) },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(6.dp)
+                                        .clip(RoundedCornerShape(3.dp)),
+                                    color = if (prog >= 50) IndustrialEmerald else IndustrialAmber,
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "$prog%",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.width(36.dp),
+                                    textAlign = TextAlign.End
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ====================================================================
+// 2.3 OVERHAUL ORGANIZATIONAL PERSONNEL ROSTER
+// ====================================================================
+
+@Composable
+fun PersonnelDirectoryCard(
+    allUsers: List<UserEntity>,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+        shadowElevation = 3.dp,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = IndustrialPurple.copy(alpha = 0.12f),
+                        modifier = Modifier.size(42.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Groups,
+                                contentDescription = null,
+                                tint = IndustrialPurple,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "ساختار سازمانی و پرسنل اورهال غدیر نی‌ریز",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "مدیریت • برنامه‌ریزی • مکانیک • برق • ابزاردقیق و اتوماسیون • نسوز • WTP • بازرسی",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                IconButton(onClick = { expanded = !expanded }) {
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null
+                    )
+                }
+            }
+
+            AnimatedVisibility(visible = expanded) {
+                Column(modifier = Modifier.padding(top = 14.dp)) {
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    val orgSections = listOf(
+                        Triple("مدیریت پروژه اورهال", "مهندس اعمالی (مدیر پروژه اورهال فولاد غدیر نی‌ریز)", IndustrialNavy),
+                        Triple(
+                            "واحد برنامه‌ریزی تعمیرات",
+                            "مهندس تاج بخش (رئیس برنامه‌ریزی تعمیرات)\nکارشناسان: مهندس پورخندانی، مهندس اله بخشی، مهندس شبستان",
+                            IndustrialPurple
+                        ),
+                        Triple(
+                            "واحد تعمیرات مکانیک",
+                            "مهندس اله بخش (رئیس واحد مکانیک)\nکارشناسان و ناظرین: مهندسان بقری، فرخ، شجاعی فرد، مبارکی",
+                            IndustrialEmerald
+                        ),
+                        Triple(
+                            "واحد تعمیرات برق",
+                            "مهندس یادگار (رئیس واحد برق)\nکارشناس: مهندس البرزی",
+                            IndustrialAmberDark
+                        ),
+                        Triple(
+                            "واحد ابزاردقیق و اتوماسیون",
+                            "مهندس ریحانی (رئیس واحد ابزاردقیق و اتوماسیون)\nکارشناس: مهندس دمیری (واحد یکپارچه اتوماسیون و ابزاردقیق)",
+                            IndustrialSteelBlue
+                        ),
+                        Triple(
+                            "واحد نسوز",
+                            "مهندس یاراحمدی (کارشناس و سرپرست نسوز)",
+                            IndustrialBurgundy
+                        ),
+                        Triple(
+                            "واحد انرژی و سیالات (WTP)",
+                            "مهندس ضیغمی (کارشناس و ناظر سیالات)",
+                            IndustrialSteelBlue
+                        ),
+                        Triple(
+                            "واحد بازرسی فنی",
+                            "مهندس خاکی (کارشناس بازرسی فنی و NDT)",
+                            Color(0xFF5D4037)
+                        )
+                    )
+
+                    orgSections.forEach { (title, description, color) ->
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = color.copy(alpha = 0.08f),
+                            border = BorderStroke(1.dp, color.copy(alpha = 0.25f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(color)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = title,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = color
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = description,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    lineHeight = 16.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StatusKpiCard(
+    title: String,
+    count: Int,
+    color: Color,
+    icon: ImageVector,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = color.copy(alpha = 0.12f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.3f)),
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(text = count.toString(), fontWeight = FontWeight.Bold, fontSize = 18.sp, color = color)
+            Text(text = title, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        }
+    }
+}
+
+// ====================================================================
+// 3. WBS EXECUTION TAB WITH HIERARCHICAL MINDMAP & NESTED TASK TRACKING
+// ====================================================================
+
+@Composable
+fun WbsExecutionTab(
+    items: List<OversightItemEntity>,
+    wbsTree: List<WbsTreeNode>,
+    allPrerequisites: List<ItemPrerequisiteEntity>,
+    allAssignments: List<ItemAssignmentEntity>,
+    allUsers: List<UserEntity>,
+    currentUser: UserEntity?,
+    searchQuery: String,
+    selectedUnit: String?,
+    selectedStatus: String?,
+    supervisorFilter: SupervisorFilter,
+    showOnlyMine: Boolean,
+    expandedUnits: Set<String>,
+    expandedAreas: Set<String>,
+    expandedTreeNodes: Set<Long>,
+    currentViewMode: WbsViewMode,
+    onSearchChange: (String) -> Unit,
+    onUnitSelect: (String?) -> Unit,
+    onStatusSelect: (String?) -> Unit,
+    onSupervisorFilterSelect: (SupervisorFilter) -> Unit,
+    onToggleOnlyMine: (Boolean) -> Unit,
+    onToggleUnitExpansion: (String) -> Unit,
+    onToggleAreaExpansion: (String) -> Unit,
+    onToggleTreeNodeExpanded: (Long) -> Unit,
+    onExpandAllTreeNodes: () -> Unit,
+    onCollapseAllTreeNodes: () -> Unit,
+    onSetViewMode: (WbsViewMode) -> Unit,
+    onItemClickForDailyUpdate: (OversightItemEntity) -> Unit,
+    onAddNewItem: () -> Unit,
+    onAddSubtask: (parent: OversightItemEntity, title: String, durationHours: Double, manpower: Int, equipment: String, location: String) -> Unit,
+    onDeleteHierarchy: (itemId: Long) -> Unit,
+    onEditItem: (item: OversightItemEntity) -> Unit
+) {
+    com.example.ui.components.WbsHierarchyManagementView(
+        items = items,
+        wbsTree = wbsTree,
+        allPrerequisites = allPrerequisites,
+        allAssignments = allAssignments,
+        allUsers = allUsers,
+        currentUser = currentUser,
+        searchQuery = searchQuery,
+        selectedUnit = selectedUnit,
+        selectedStatus = selectedStatus,
+        supervisorFilter = supervisorFilter,
+        showOnlyMine = showOnlyMine,
+        expandedUnits = expandedUnits,
+        expandedAreas = expandedAreas,
+        expandedTreeNodes = expandedTreeNodes,
+        currentViewMode = currentViewMode,
+        onSearchChange = onSearchChange,
+        onUnitSelect = onUnitSelect,
+        onStatusSelect = onStatusSelect,
+        onSupervisorFilterSelect = onSupervisorFilterSelect,
+        onToggleOnlyMine = onToggleOnlyMine,
+        onToggleUnitExpansion = onToggleUnitExpansion,
+        onToggleAreaExpansion = onToggleAreaExpansion,
+        onToggleTreeNodeExpanded = onToggleTreeNodeExpanded,
+        onExpandAllTreeNodes = onExpandAllTreeNodes,
+        onCollapseAllTreeNodes = onCollapseAllTreeNodes,
+        onSetViewMode = onSetViewMode,
+        onItemClickForDailyUpdate = onItemClickForDailyUpdate,
+        onAddNewRootItem = onAddNewItem,
+        onAddSubtask = onAddSubtask,
+        onDeleteHierarchy = onDeleteHierarchy,
+        onEditItem = onEditItem
+    )
+}
+
+@Composable
+fun WbsTaskCard(
+    item: OversightItemEntity,
+    allPrerequisites: List<ItemPrerequisiteEntity>,
+    allAssignments: List<ItemAssignmentEntity>,
+    allUsers: List<UserEntity>,
+    currentUser: UserEntity?,
+    onQuickUpdate: () -> Unit
+) {
+    val prereqCount = allPrerequisites.count { it.itemId == item.id }
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp,
+        border = BorderStroke(
+            1.dp,
+            when (item.status) {
+                "blocked" -> MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
+                "in_progress" -> IndustrialSteelBlue.copy(alpha = 0.5f)
+                "completed" -> IndustrialEmerald.copy(alpha = 0.5f)
+                else -> MaterialTheme.colorScheme.outlineVariant
+            }
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onQuickUpdate() }
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            // WBS & Equipment & Status Badge
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        Text(
+                            text = "WBS: ${item.wbsCode}",
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    if (item.equipmentName.isNotBlank() && item.equipmentName != item.title) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "تجهیز: ${item.equipmentName}",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = when (item.status) {
+                        "completed" -> IndustrialEmerald.copy(alpha = 0.15f)
+                        "in_progress" -> IndustrialSteelBlue.copy(alpha = 0.15f)
+                        "blocked" -> MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
+                        else -> Color.Gray.copy(alpha = 0.15f)
+                    }
+                ) {
+                    Text(
+                        text = when (item.status) {
+                            "completed" -> "تکمیل شده"
+                            "in_progress" -> "در حال اجرا"
+                            "blocked" -> "متوقف / دارای مانع"
+                            else -> "در انتظار شروع"
+                        },
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = when (item.status) {
+                            "completed" -> IndustrialEmerald
+                            "in_progress" -> IndustrialSteelBlue
+                            "blocked" -> MaterialTheme.colorScheme.error
+                            else -> Color.Gray
+                        }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Task Name
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Progress Bar
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                LinearProgressIndicator(
+                    progress = { item.progressPercentage / 100f },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp)),
+                    color = when (item.status) {
+                        "completed" -> IndustrialEmerald
+                        "blocked" -> MaterialTheme.colorScheme.error
+                        else -> IndustrialAmber
+                    },
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "${item.progressPercentage}%",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Badges: Manpower, Hours, Prerequisites, Action Button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Manpower Pill
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Groups, contentDescription = null, modifier = Modifier.size(13.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("${item.manpowerCount} نفر", fontSize = 11.sp)
+                        }
+                    }
+
+                    // Duration / Hours Pill
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(13.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("${item.actualHours.toInt()} / ${item.durationHours.toInt()} ساعت", fontSize = 11.sp)
+                        }
+                    }
+
+                    if (prereqCount > 0) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = IndustrialAmber.copy(alpha = 0.15f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Lock, contentDescription = null, tint = IndustrialAmberDark, modifier = Modifier.size(12.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text("$prereqCount پیش‌نیاز", fontSize = 10.sp, color = IndustrialAmberDark)
+                            }
+                        }
+                    }
+                }
+
+                // Quick Action Button
+                FilledTonalButton(
+                    onClick = onQuickUpdate,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (currentUser?.role == "supervisor") "ثبت کارکرد" else "جزئیات / تغییر",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ====================================================================
+// 4. SUPERVISOR DAILY PROGRESS & TIME RECORDING DIALOG
+// ====================================================================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SupervisorDailyUpdateDialog(
+    item: OversightItemEntity,
+    prerequisites: List<OversightItemEntity>,
+    currentUser: UserEntity?,
+    onDismiss: () -> Unit,
+    onConfirm: (
+        newProgress: Int,
+        manpowerCount: Int,
+        hoursSpent: Double,
+        status: String,
+        remarks: String,
+        issues: String
+    ) -> Unit
+) {
+    var progress by remember { mutableStateOf(item.progressPercentage) }
+    var manpower by remember { mutableStateOf(if (item.manpowerCount > 0) item.manpowerCount else 4) }
+    var hoursSpentText by remember { mutableStateOf("2") }
+    var selectedStatus by remember { mutableStateOf(item.status) }
+    var remarks by remember { mutableStateOf("") }
+    var issues by remember { mutableStateOf(item.issues) }
+
+    val incompletePrereqs = prerequisites.filter { it.status != "completed" }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 16.dp)
+        ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // Header
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "ثبت کارکرد روزانه و پیشرفت",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "کد WBS: ${item.wbsCode} • واحد: ${item.executiveUnit}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Default.Close, contentDescription = "بستن")
+                        }
+                    }
+                }
+
+                // Task Name Banner
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = item.title,
+                            modifier = Modifier.padding(12.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                // Prerequisite Warnings
+                if (incompletePrereqs.isNotEmpty()) {
+                    item {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(
+                                    text = "هشدار: پیش‌نیازهای زیر تکمیل نشده‌اند:",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                                incompletePrereqs.forEach { p ->
+                                    Text(
+                                        text = "• [${p.wbsCode}] ${p.title} (${getPersianStatusLabel(p.status)} - ${p.progressPercentage}%)",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Progress Percentage Slider
+                item {
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("درصد پیشرفت کار (Progress)", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("$progress%", fontWeight = FontWeight.Bold, color = IndustrialSteelBlue, fontSize = 14.sp)
+                        }
+                        Slider(
+                            value = progress.toFloat(),
+                            onValueChange = { progress = it.toInt() },
+                            valueRange = 0f..100f,
+                            steps = 19
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            listOf(0, 25, 50, 75, 100).forEach { p ->
+                                OutlinedButton(
+                                    onClick = {
+                                        progress = p
+                                        if (p == 100) selectedStatus = "completed"
+                                        else if (p > 0 && selectedStatus == "pending") selectedStatus = "in_progress"
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                    shape = RoundedCornerShape(6.dp),
+                                    modifier = Modifier.height(28.dp)
+                                ) {
+                                    Text("$p%", fontSize = 10.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Manpower and Hours Count
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // Manpower Count
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text("تعداد نفرات فعال", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    IconButton(
+                                        onClick = { if (manpower > 1) manpower-- },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(Icons.Default.Remove, contentDescription = null)
+                                    }
+                                    Text("$manpower نفر", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    IconButton(
+                                        onClick = { manpower++ },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(Icons.Default.Add, contentDescription = null)
+                                    }
+                                }
+                            }
+                        }
+
+                        // Hours Spent Today
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text("ساعات کارکرد امروز", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                OutlinedTextField(
+                                    value = hoursSpentText,
+                                    onValueChange = { hoursSpentText = it },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Status Selector
+                item {
+                    Text("وضعیت اجرایی فعالیت", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(
+                            Triple("pending", "در انتظار", Color.Gray),
+                            Triple("in_progress", "در حال اجرا", IndustrialSteelBlue),
+                            Triple("completed", "تکمیل شده", IndustrialEmerald),
+                            Triple("blocked", "متوقف / مانع", MaterialTheme.colorScheme.error)
+                        ).forEach { (st, label, clr) ->
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (selectedStatus == st) clr.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                border = BorderStroke(1.dp, if (selectedStatus == st) clr else Color.Transparent),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable {
+                                        selectedStatus = st
+                                        if (st == "completed") progress = 100
+                                        if (st == "pending") progress = 0
+                                    }
+                            ) {
+                                Text(
+                                    text = label,
+                                    modifier = Modifier.padding(vertical = 8.dp),
+                                    textAlign = TextAlign.Center,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (selectedStatus == st) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (selectedStatus == st) clr else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Obstacles / Issues (if blocked or general)
+                item {
+                    OutlinedTextField(
+                        value = issues,
+                        onValueChange = { issues = it },
+                        label = { Text("شرح موانع یا دلایل توقف (در صورت وجود)") },
+                        placeholder = { Text("مانند: در انتظار تحویل قطعه یدکی، عدم حضور پیمانکار نسوز...") },
+                        maxLines = 2,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                // Supervisor Daily Remarks
+                item {
+                    OutlinedTextField(
+                        value = remarks,
+                        onValueChange = { remarks = it },
+                        label = { Text("توضیحات و گزارش کار ناظر") },
+                        placeholder = { Text("اقدامات انجام‌شده در شیفت جاری...") },
+                        maxLines = 2,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                // Action Buttons
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = onDismiss) {
+                            Text("انصراف")
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                val hrs = hoursSpentText.toDoubleOrNull() ?: 1.0
+                                onConfirm(progress, manpower, hrs, selectedStatus, remarks, issues)
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = IndustrialSteelBlue)
+                        ) {
+                            Icon(Icons.Default.Save, contentDescription = null)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("ثبت و ذخیره گزارش", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ====================================================================
+// 5. MSP SYNCHRONIZATION & EOD REVIEW TAB (FOR PLANNER / ADMIN)
+// ====================================================================
+
+@Composable
+fun MspSyncTab(
+    dailyLogs: List<DailyWorkLogEntity>,
+    exportedMspCsv: String?,
+    preview: ParsedImportPreview?,
+    currentUser: UserEntity?,
+    onGenerateEodExport: () -> Unit,
+    onImportUpdatedSchedule: (String) -> Unit,
+    onLoadSampleGhadirData: () -> Unit,
+    onCommitImport: () -> Unit,
+    onCancelPreview: () -> Unit,
+    onClearExport: () -> Unit
+) {
+    var showImportDialog by remember { mutableStateOf(false) }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        // Planner Workflow Guide Banner
+        item {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = IndustrialNavy,
+                shadowElevation = 3.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.AccountTree, contentDescription = null, tint = IndustrialAmber, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "چرخه همگام‌سازی پایان روز با MS Project",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "۱. بررسی درصدهای ثبت‌شده توسط سرپرستان اجرایی\n۲. استخراج خروجی پایان روز به فرمت MSP\n۳. به‌روزرسانی فایل mpp/اکسل و انتشار مجدد به اپلیکیشن کل نفرات",
+                        fontSize = 12.sp,
+                        color = Color.White.copy(alpha = 0.85f),
+                        lineHeight = 20.sp
+                    )
+                }
+            }
+        }
+
+        // Action Buttons Row
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onGenerateEodExport,
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = IndustrialEmerald),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.FileDownload, contentDescription = null)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("استخراج برای MSP", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+
+                FilledTonalButton(
+                    onClick = { showImportDialog = true },
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.FileUpload, contentDescription = null)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("بارگذاری از MSP", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        // Export Result Card (if generated)
+        if (exportedMspCsv != null) {
+            item {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    border = BorderStroke(1.dp, IndustrialEmerald),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("خروجی CSV آماده ورود به MS Project:", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            IconButton(onClick = onClearExport, modifier = Modifier.size(24.dp)) {
+                                Icon(Icons.Default.Close, contentDescription = "بستن")
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFF1E1E1E),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = exportedMspCsv.take(500) + "\n... [ادامه داده‌ها موجود است]",
+                                color = Color(0xFF81C784),
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Import Preview Card (if active)
+        if (preview != null) {
+            item {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = IndustrialPurple.copy(alpha = 0.1f),
+                    border = BorderStroke(1.dp, IndustrialPurple),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "پیش‌نمایش واردات: ${preview.activeTasksCount} فعالیت شناسایی شد",
+                            fontWeight = FontWeight.Bold,
+                            color = IndustrialPurple
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "واحدهای شناسایی‌شده: ${preview.executiveUnitsFound.joinToString("، ")} • عمق WBS: ${preview.maxOutlineDepth} سطح",
+                            fontSize = 12.sp
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(onClick = onCancelPreview) {
+                                Text("انصراف")
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = onCommitImport,
+                                colors = ButtonDefaults.buttonColors(containerColor = IndustrialPurple)
+                            ) {
+                                Text("تأیید و انتشار سراسری در اپ")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Daily Progress Log Register from Supervisors
+        item {
+            Text(
+                text = "گزارشات کارکرد ثبت‌شده امروز توسط سرپرستان (${dailyLogs.size} رکورد)",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        if (dailyLogs.isEmpty()) {
+            item {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "هنوز گزارشی برای امروز ثبت نشده است. ناظرین و سرپرستان در بخش WBS کارکرد روزانه را ثبت می‌کنند.",
+                        modifier = Modifier.padding(20.dp),
+                        fontSize = 12.sp,
+                        color = Color.Gray,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        } else {
+            items(dailyLogs, key = { it.id }) { log ->
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "واحد ${log.unitName} • ناظر: ${log.recordedByUserName}",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "پیشرفت: ${log.progressPercentage}% • نفرات: ${log.manpowerCount} نفر • ساعت کار: ${log.hoursSpent}h",
+                                fontSize = 12.sp,
+                                color = IndustrialSteelBlue
+                            )
+                            if (log.remarks.isNotBlank()) {
+                                Text("توضیحات: ${log.remarks}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = IndustrialEmerald.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = log.date,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                fontSize = 10.sp,
+                                color = IndustrialEmerald
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showImportDialog) {
+        var csvInput by remember { mutableStateOf("") }
+        Dialog(onDismissRequest = { showImportDialog = false }) {
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Text("واردات فایل به‌روزشده از MS Project", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text("می‌توانید داده‌های نمونه فولاد غدیر نی‌ریز را بارگذاری کنید یا متن خروجی CSV را جای‌گذاری نمایید:", fontSize = 12.sp)
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Button(
+                        onClick = {
+                            onLoadSampleGhadirData()
+                            showImportDialog = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = IndustrialSteelBlue),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.CloudDownload, contentDescription = null)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("بارگذاری خودکار داده‌های واقعی کارخانه احیا")
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = csvInput,
+                        onValueChange = { csvInput = it },
+                        placeholder = { Text("یا چسباندن متن CSV فایل MS Project...") },
+                        maxLines = 4,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { showImportDialog = false }) {
+                            Text("انصراف")
+                        }
+                        if (csvInput.isNotBlank()) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(onClick = {
+                                onImportUpdatedSchedule(csvInput)
+                                showImportDialog = false
+                            }) {
+                                Text("پردازش و پیش‌نمایش")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ====================================================================
+// 6. SESSIONS, DECISIONS & NOTES TAB
+// ====================================================================
+
+@Composable
+fun SessionsDecisionsTab(
+    sessions: List<PlanningSessionEntity>,
+    decisions: List<SessionDecisionEntity>,
+    notes: List<SessionNoteEntity>,
+    wbsItems: List<OversightItemEntity>,
+    currentUser: UserEntity?,
+    onAddSession: () -> Unit,
+    onAddDecision: (Long) -> Unit,
+    onAddNote: (Long) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "جلسات هماهنگی و تصمیمات اورهال",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+
+                if (currentUser?.role == "admin" || currentUser?.role == "planner") {
+                    Button(
+                        onClick = onAddSession,
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = IndustrialSteelBlue)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("ثبت جلسه جدید", fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+
+        if (sessions.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(40.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("هیچ جلسه هماهنگی ثبت نشده است.", color = Color.Gray)
+                }
+            }
+        }
+
+        items(sessions, key = { it.id }) { session ->
+            val sessionDecs = decisions.filter { it.sessionId == session.id }
+            val sessionNts = notes.filter { it.sessionId == session.id }
+
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 2.dp,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(session.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Text(
+                                text = "${session.sessionDate} • ${session.location}",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+
+                    if (session.minutesSummary.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = session.minutesSummary,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Decisions List
+                    if (sessionDecs.isNotEmpty()) {
+                        Text("تصمیمات مصوب جلسه:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = IndustrialEmerald)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        sessionDecs.forEach { dec ->
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = IndustrialEmerald.copy(alpha = 0.08f),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 2.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = IndustrialEmerald, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "${dec.decisionText} (واحد مسئول: ${dec.assignedUnit})",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Notes List
+                    if (sessionNts.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text("یادداشت‌ها و نکات مطرح‌شده:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = IndustrialNavy)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        sessionNts.forEach { nt ->
+                            Text(
+                                text = "• ${nt.noteText} (${nt.authorName})",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Action buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        if (currentUser?.role == "admin" || currentUser?.role == "planner") {
+                            OutlinedButton(
+                                onClick = { onAddDecision(session.id) },
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.height(30.dp)
+                            ) {
+                                Text("+ ثبت مصوبه", fontSize = 11.sp)
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
+                        OutlinedButton(
+                            onClick = { onAddNote(session.id) },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.height(30.dp)
+                        ) {
+                            Text("+ یادداشت", fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ====================================================================
+// 7. PROCUREMENT & SPARE PARTS TAB
+// ====================================================================
+
+@Composable
+fun ProcurementTab(
+    procurements: List<ProcurementRequestEntity>,
+    wbsItems: List<OversightItemEntity>,
+    currentUser: UserEntity?,
+    onAddRequest: () -> Unit,
+    onApproveRequest: (Long) -> Unit,
+    onRejectRequest: (Long, String) -> Unit,
+    onUpdateStatus: (Long, String) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "مدیریت تأمین قطعات یدکی و پیمانکاران",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Button(
+                    onClick = onAddRequest,
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = IndustrialSteelBlue)
+                ) {
+                    Icon(Icons.Default.AddShoppingCart, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("درخواست تأمین", fontSize = 12.sp)
+                }
+            }
+        }
+
+        if (procurements.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(40.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("هیچ درخواست خریدی ثبت نشده است.", color = Color.Gray)
+                }
+            }
+        }
+
+        items(procurements, key = { it.id }) { req ->
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 2.dp,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(req.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = when (req.status) {
+                                "approved", "ordered", "received" -> IndustrialEmerald.copy(alpha = 0.15f)
+                                "rejected" -> MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
+                                else -> IndustrialAmber.copy(alpha = 0.15f)
+                            }
+                        ) {
+                            Text(
+                                text = when (req.status) {
+                                    "requested" -> "در انتظار تأیید"
+                                    "approved" -> "تأیید شده"
+                                    "ordered" -> "سفارش‌گذاری شده"
+                                    "received" -> "تحویل انبار / سایت"
+                                    "rejected" -> "رد شده"
+                                    else -> req.status
+                                },
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = when (req.status) {
+                                    "approved", "ordered", "received" -> IndustrialEmerald
+                                    "rejected" -> MaterialTheme.colorScheme.error
+                                    else -> IndustrialAmberDark
+                                }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "نوع: ${req.itemType} • مقدار: ${req.quantity} • برآورد هزینه: ${req.estimatedCost} • درخواست‌کننده: ${req.requestedByUserName}",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    // Planner / Admin Actions
+                    if ((currentUser?.role == "admin" || currentUser?.role == "planner") && req.status == "requested") {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            OutlinedButton(
+                                onClick = { onRejectRequest(req.id, "عدم اولویت در این شیفت") },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.height(32.dp)
+                            ) {
+                                Text("رد درخواست", fontSize = 11.sp)
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = { onApproveRequest(req.id) },
+                                colors = ButtonDefaults.buttonColors(containerColor = IndustrialEmerald),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.height(32.dp)
+                            ) {
+                                Text("تأیید خرید", fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ====================================================================
+// 8. AUDIT AND LOGS TAB
+// ====================================================================
+
+@Composable
+fun AuditAndReportsTab(
+    auditLogs: List<AuditLogEntity>,
+    currentUser: UserEntity?,
+    kpis: DashboardKpis
+) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Text(
+                text = "سوابق ممیزی و تاریخچه تغییرات سیستم (Audit Trail)",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        items(auditLogs, key = { it.id }) { log ->
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "${log.performedByUserName} (${getPersianRole(log.performedByUserRole)})",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            text = log.remarks.ifBlank { "عملیات: ${log.action} بر روی ${log.entityType}" },
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        text = log.timestamp.takeLast(11),
+                        fontSize = 10.sp,
+                        color = Color.Gray
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ====================================================================
+// 9. DIALOGS (ADD WBS ITEM, SESSIONS, DECISIONS, PROCUREMENTS)
+// ====================================================================
+
+@Composable
+fun AddWbsItemDialog(
+    existingItems: List<OversightItemEntity>,
+    supervisors: List<UserEntity>,
+    onDismiss: () -> Unit,
+    onConfirm: (
+        title: String,
+        wbsCode: String,
+        parentItemId: Long?,
+        outlineLevel: Int,
+        executiveUnit: String,
+        generalArea: String,
+        executionLocation: String,
+        equipmentName: String,
+        durationHours: Double,
+        plannedStart: String,
+        plannedEnd: String,
+        prerequisiteIds: List<Long>,
+        supervisorIds: List<Long>
+    ) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var wbsCode by remember { mutableStateOf("") }
+    var executiveUnit by remember { mutableStateOf("مکانیک") }
+    var generalArea by remember { mutableStateOf("سایت احیا") }
+    var executionLocation by remember { mutableStateOf("محوطه عمومی") }
+    var equipmentName by remember { mutableStateOf("تجهیزات فرآیندی") }
+    var durationText by remember { mutableStateOf("8") }
+    var plannedStart by remember { mutableStateOf("1404/10/12") }
+    var plannedEnd by remember { mutableStateOf("1404/10/14") }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                item {
+                    Text("تعریف فعالیت جدید در WBS", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                }
+
+                item {
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = { title = it },
+                        label = { Text("عنوان فعالیت") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                item {
+                    OutlinedTextField(
+                        value = wbsCode,
+                        onValueChange = { wbsCode = it },
+                        label = { Text("کد WBS") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                item {
+                    OutlinedTextField(
+                        value = executiveUnit,
+                        onValueChange = { executiveUnit = it },
+                        label = { Text("واحد اجرایی (مکانیک، برق، ابزار دقیق...)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                item {
+                    OutlinedTextField(
+                        value = equipmentName,
+                        onValueChange = { equipmentName = it },
+                        label = { Text("نام تجهیز") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                item {
+                    OutlinedTextField(
+                        value = durationText,
+                        onValueChange = { durationText = it },
+                        label = { Text("مدت زمان پیش‌بینی‌شده (ساعت)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = onDismiss) {
+                            Text("انصراف")
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                if (title.isNotBlank()) {
+                                    val dur = durationText.toDoubleOrNull() ?: 8.0
+                                    onConfirm(
+                                        title,
+                                        wbsCode.ifBlank { "100" },
+                                        null,
+                                        2,
+                                        executiveUnit,
+                                        generalArea,
+                                        executionLocation,
+                                        equipmentName,
+                                        dur,
+                                        plannedStart,
+                                        plannedEnd,
+                                        emptyList(),
+                                        emptyList()
+                                    )
+                                }
+                            }
+                        ) {
+                            Text("ثبت فعالیت")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun EditWbsItemDialog(
+    item: OversightItemEntity,
+    existingItems: List<OversightItemEntity>,
+    supervisors: List<UserEntity>,
+    allPrerequisites: List<ItemPrerequisiteEntity>,
+    allAssignments: List<ItemAssignmentEntity>,
+    onDismiss: () -> Unit,
+    onConfirm: (
+        updatedItem: OversightItemEntity,
+        prerequisiteIds: List<Long>,
+        supervisorIds: List<Long>
+    ) -> Unit
+) {
+    var title by remember { mutableStateOf(item.title) }
+    var wbsCode by remember { mutableStateOf(item.wbsCode) }
+    var executiveUnit by remember { mutableStateOf(item.executiveUnit) }
+    var generalArea by remember { mutableStateOf(item.generalArea) }
+    var executionLocation by remember { mutableStateOf(item.executionLocation) }
+    var equipmentName by remember { mutableStateOf(item.equipmentName) }
+    var durationText by remember { mutableStateOf(item.durationHours.toString()) }
+    var manpowerText by remember { mutableStateOf(item.manpowerCount.toString()) }
+    var plannedStart by remember { mutableStateOf(item.plannedStartDate) }
+    var plannedEnd by remember { mutableStateOf(item.plannedEndDate) }
+    var status by remember { mutableStateOf(item.status) }
+    var progress by remember { mutableStateOf(item.progressPercentage) }
+
+    val initialPrereqs = remember { allPrerequisites.filter { it.itemId == item.id }.map { it.prerequisiteItemId }.toSet() }
+    var selectedPrereqIds by remember { mutableStateOf(initialPrereqs) }
+
+    val initialSupervisors = remember { allAssignments.filter { it.itemId == item.id }.map { it.supervisorUserId }.toSet() }
+    var selectedSupervisorIds by remember { mutableStateOf(initialSupervisors) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Edit, contentDescription = null, tint = IndustrialSteelBlue)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("ویرایش اطلاعات فعالیت WBS", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+
+                item {
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = { title = it },
+                        label = { Text("عنوان فعالیت *") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                item {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = wbsCode,
+                            onValueChange = { wbsCode = it },
+                            label = { Text("کد WBS") },
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = executiveUnit,
+                            onValueChange = { executiveUnit = it },
+                            label = { Text("واحد اجرایی") },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                item {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = equipmentName,
+                            onValueChange = { equipmentName = it },
+                            label = { Text("نام تجهیز") },
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = executionLocation,
+                            onValueChange = { executionLocation = it },
+                            label = { Text("محل اجرا") },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                item {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = durationText,
+                            onValueChange = { durationText = it },
+                            label = { Text("مدت پیش‌بینی (ساعت)") },
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = manpowerText,
+                            onValueChange = { manpowerText = it },
+                            label = { Text("نفرات") },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                item {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = plannedStart,
+                            onValueChange = { plannedStart = it },
+                            label = { Text("تاریخ شروع") },
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = plannedEnd,
+                            onValueChange = { plannedEnd = it },
+                            label = { Text("تاریخ پایان") },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = onDismiss) { Text("انصراف") }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                if (title.isNotBlank()) {
+                                    val dur = durationText.toDoubleOrNull() ?: item.durationHours
+                                    val mp = manpowerText.toIntOrNull() ?: item.manpowerCount
+                                    val updated = item.copy(
+                                        title = title,
+                                        wbsCode = wbsCode,
+                                        executiveUnit = executiveUnit,
+                                        generalArea = generalArea,
+                                        executionLocation = executionLocation,
+                                        equipmentName = equipmentName,
+                                        durationHours = dur,
+                                        manpowerCount = mp,
+                                        plannedStartDate = plannedStart,
+                                        plannedEndDate = plannedEnd,
+                                        status = status,
+                                        progressPercentage = progress
+                                    )
+                                    onConfirm(updated, selectedPrereqIds.toList(), selectedSupervisorIds.toList())
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = IndustrialSteelBlue)
+                        ) {
+                            Text("ذخیره تغییرات")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AddPlanningSessionDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (title: String, date: String, location: String, minutes: String) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var date by remember { mutableStateOf("1404/10/12") }
+    var location by remember { mutableStateOf("اتاق جلسات کنترل اورهال") }
+    var minutes by remember { mutableStateOf("") }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text("ثبت صورتجلسه هماهنگی جدید", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("عنوان جلسه") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = date, onValueChange = { date = it }, label = { Text("تاریخ جلسه") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = location, onValueChange = { location = it }, label = { Text("مکان / سالن") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = minutes, onValueChange = { minutes = it }, label = { Text("خلاصه مذاکرات") }, maxLines = 3, modifier = Modifier.fillMaxWidth())
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) { Text("انصراف") }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = { if (title.isNotBlank()) onConfirm(title, date, location, minutes) }) {
+                        Text("ثبت جلسه")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AddDecisionDialog(
+    wbsItems: List<OversightItemEntity>,
+    onDismiss: () -> Unit,
+    onConfirm: (decisionText: String, assignedUnit: String, itemId: Long?) -> Unit
+) {
+    var decisionText by remember { mutableStateOf("") }
+    var assignedUnit by remember { mutableStateOf("مکانیک") }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text("ثبت مصوبه و تصمیم رسمی جلسه", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                OutlinedTextField(value = decisionText, onValueChange = { decisionText = it }, label = { Text("متن مصوبه / اقدام مورد توافق") }, maxLines = 3, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = assignedUnit, onValueChange = { assignedUnit = it }, label = { Text("واحد مسئول پیگیری") }, modifier = Modifier.fillMaxWidth())
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) { Text("انصراف") }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = { if (decisionText.isNotBlank()) onConfirm(decisionText, assignedUnit, null) }) {
+                        Text("ثبت مصوبه")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AddProcurementRequestDialog(
+    wbsItems: List<OversightItemEntity>,
+    onDismiss: () -> Unit,
+    onConfirm: (title: String, itemType: String, quantity: String, estimatedCost: String, itemId: Long) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var itemType by remember { mutableStateOf("قطعه یدکی") }
+    var quantity by remember { mutableStateOf("1 عدد") }
+    var estimatedCost by remember { mutableStateOf("50,000,000 ریال") }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text("ثبت درخواست تأمین قطعه / پیمانکار", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("شرح قطعه یا خدمت درخواستی") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = itemType, onValueChange = { itemType = it }, label = { Text("نوع (قطعه یدکی، پیمانکار، ابزار)") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = quantity, onValueChange = { quantity = it }, label = { Text("تعداد / مقدار") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = estimatedCost, onValueChange = { estimatedCost = it }, label = { Text("برآورد هزینه") }, modifier = Modifier.fillMaxWidth())
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) { Text("انصراف") }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = {
+                        if (title.isNotBlank()) {
+                            val targetItemId = wbsItems.firstOrNull()?.id ?: 1L
+                            onConfirm(title, itemType, quantity, estimatedCost, targetItemId)
+                        }
+                    }) {
+                        Text("ارسال درخواست")
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun getPersianRole(role: String): String = when (role) {
+    "admin" -> "مدیر ارشد اورهال"
+    "planner" -> "برنامه‌ریز اجرایی"
+    "supervisor" -> "ناظر و سرپرست اجرایی"
+    "unit_head" -> "مدیر / رئیس واحد"
+    else -> role
+}
+
+private fun getPersianStatusLabel(status: String): String = when (status) {
+    "pending" -> "در انتظار شروع"
+    "in_progress" -> "در حال اجرا"
+    "completed" -> "تکمیل شده"
+    "blocked" -> "متوقف / دارای مانع"
+    else -> status
+}

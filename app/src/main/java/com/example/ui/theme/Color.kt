@@ -1,0 +1,60 @@
+package com.example.ui.theme
+
+import androidx.compose.ui.graphics.Color
+
+// Industrial Primary Palette
+val IndustrialNavy = Color(0xFF0F2537)
+val IndustrialNavyLight = Color(0xFF1E3A5F)
+val IndustrialAmber = Color(0xFFD97706)
+val IndustrialAmberLight = Color(0xFFF59E0B)
+val IndustrialAmberDark = Color(0xFFB45309)
+val IndustrialTeal = Color(0xFF0D9488)
+val IndustrialPurple = Color(0xFF7C3AED)
+val IndustrialEmerald = Color(0xFF059669)
+val IndustrialSteelBlue = Color(0xFF2563EB)
+val IndustrialCrimson = Color(0xFFDC2626)
+val IndustrialBurgundy = Color(0xFF831843)
+
+// Status Semantic Colors
+val StatusCompleted = Color(0xFF10B981)
+val StatusCompletedBg = Color(0xFFD1FAE5)
+val StatusInProgress = Color(0xFF0284C7)
+val StatusInProgressBg = Color(0xFFE0F2FE)
+val StatusBlocked = Color(0xFFEF4444)
+val StatusBlockedBg = Color(0xFFFEE2E2)
+val StatusPending = Color(0xFF64748B)
+val StatusPendingBg = Color(0xFFF1F5F9)
+
+// Light Theme
+val LightPrimary = Color(0xFF1E3A5F)
+val LightOnPrimary = Color(0xFFFFFFFF)
+val LightPrimaryContainer = Color(0xFFDBEAFE)
+val LightOnPrimaryContainer = Color(0xFF172554)
+val LightSecondary = Color(0xFFD97706)
+val LightOnSecondary = Color(0xFFFFFFFF)
+val LightSecondaryContainer = Color(0xFFFEF3C7)
+val LightOnSecondaryContainer = Color(0xFF78350F)
+val LightBackground = Color(0xFFF8FAFC)
+val LightOnBackground = Color(0xFF0F172A)
+val LightSurface = Color(0xFFFFFFFF)
+val LightOnSurface = Color(0xFF0F172A)
+val LightSurfaceVariant = Color(0xFFF1F5F9)
+val LightOnSurfaceVariant = Color(0xFF475569)
+val LightOutline = Color(0xFFCBD5E1)
+
+// Dark Theme
+val DarkPrimary = Color(0xFF93C5FD)
+val DarkOnPrimary = Color(0xFF0F2537)
+val DarkPrimaryContainer = Color(0xFF1E3A5F)
+val DarkOnPrimaryContainer = Color(0xFFDBEAFE)
+val DarkSecondary = Color(0xFFFCD34D)
+val DarkOnSecondary = Color(0xFF78350F)
+val DarkSecondaryContainer = Color(0xFF92400E)
+val DarkOnSecondaryContainer = Color(0xFFFEF3C7)
+val DarkBackground = Color(0xFF0B132B)
+val DarkOnBackground = Color(0xFFF1F5F9)
+val DarkSurface = Color(0xFF1C2541)
+val DarkOnSurface = Color(0xFFF1F5F9)
+val DarkSurfaceVariant = Color(0xFF3A506B)
+val DarkOnSurfaceVariant = Color(0xFFCBD5E1)
+val DarkOutline = Color(0xFF475569)
