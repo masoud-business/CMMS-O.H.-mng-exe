@@ -664,9 +664,11 @@ fun AreaExecutionDashboardCard(
     onSelectArea: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val currentArea = areaList.firstOrNull { it.areaKey == selectedAreaKey }
+    var activeKey by remember(selectedAreaKey) { mutableStateOf(selectedAreaKey) }
+    val currentArea = areaList.firstOrNull { it.areaKey.equals(activeKey, ignoreCase = true) }
+        ?: areaList.firstOrNull { it.areaKey.contains(activeKey, ignoreCase = true) }
         ?: areaList.firstOrNull()
-        ?: AreaAnalytics(areaKey = selectedAreaKey, areaTitle = selectedAreaKey)
+        ?: AreaAnalytics(areaKey = activeKey, areaTitle = activeKey)
 
     Surface(
         shape = RoundedCornerShape(20.dp),
@@ -706,7 +708,7 @@ fun AreaExecutionDashboardCard(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Core Area • MHU • WTP",
+                            text = "کوره و احیا • انتقال مواد (MHU) • تصفیه آب (WTP)",
                             style = MaterialTheme.typography.bodySmall,
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -754,13 +756,16 @@ fun AreaExecutionDashboardCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 areaTabs.forEach { (key, title) ->
-                    val isSelected = selectedAreaKey == key
+                    val isSelected = activeKey.equals(key, ignoreCase = true)
                     Surface(
                         shape = RoundedCornerShape(10.dp),
                         color = if (isSelected) IndustrialNavy else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                         modifier = Modifier
                             .weight(1f)
-                            .clickable { onSelectArea(key) }
+                            .clickable {
+                                activeKey = key
+                                onSelectArea(key)
+                            }
                     ) {
                         Box(
                             modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),

@@ -115,10 +115,69 @@ data class WbsTreeNode(
     val prerequisites: List<OversightItemEntity> = emptyList()
 )
 
+data class TaskLogisticsTag(
+    val id: String,
+    val label: String,
+    val shortLabel: String,
+    val iconName: String,
+    val colorHex: Long,
+    val isHeavyEquipment: Boolean = false
+)
+
+fun getLogisticsTagsForItem(item: OversightItemEntity): List<TaskLogisticsTag> {
+    val tags = mutableListOf<TaskLogisticsTag>()
+    val text = (item.title + " " + item.equipmentName + " " + item.executionLocation + " " + item.notes).lowercase()
+
+    // Crane (نیاز به جرثقیل سنگین/سبک)
+    if (text.contains("جرثقیل") || text.contains("وینچ") || text.contains("روتور") || text.contains("سکتور پلیت") ||
+        text.contains("اسکوئر بار") || text.contains("تعویض لوله") || text.contains("الکتروموتور") || text.contains("دشارژ") ||
+        text.contains("بارگیری") || text.contains("دیسمانتل") || text.contains("اسکرابر") || text.contains("فن") ||
+        text.contains("لگ داخلی") || text.contains("شارژ گندله")) {
+        val craneType = if (text.contains("سکتور") || text.contains("اسکوئر") || text.contains("کوره") || text.contains("اسکرابر")) "جرثقیل ۵۰ تن" else "جرثقیل ۲۵/۳۵ تن"
+        tags.add(TaskLogisticsTag("CRANE", craneType, "جرثقیل", "crane", 0xFFD97706, isHeavyEquipment = true))
+    }
+
+    // Scaffolding (نیاز به داربست‌بندی و کار در ارتفاع)
+    if (text.contains("داربست") || text.contains("نسوز") || text.contains("ارتفاع") || text.contains("منهول") ||
+        text.contains("تاور") || text.contains("داکت") || text.contains("سقف") || text.contains("لگ") ||
+        text.contains("گالری") || text.contains("روشنایی") || text.contains("اسکرابر")) {
+        tags.add(TaskLogisticsTag("SCAFFOLDING", "داربست‌بندی کارگاهی", "داربست", "scaffolding", 0xFF2563EB, isHeavyEquipment = true))
+    }
+
+    // Flushing / Chemical / Nitrogen Purge (فلاشینگ مسیر و شستشو)
+    if (text.contains("فلاشینگ") || text.contains("شستشو") || text.contains("اسیدشویی") || text.contains("نیتروژن") ||
+        text.contains("روغن") || text.contains("پک هیدرولیک") || text.contains("کولینگ") || text.contains("خطوط لوله") ||
+        text.contains("تخلیه لجن") || text.contains("تست نشتی") || text.contains("تزریق گاز")) {
+        tags.add(TaskLogisticsTag("FLUSHING", "فلاشینگ و شستشوی خطوط", "فلاشینگ", "water_drop", 0xFF0D9488, isHeavyEquipment = false))
+    }
+
+    // LOTO & Electrical Isolation (ایزولاسیون مکانیکی/برقی)
+    if (text.contains("loto") || text.contains("ایزولاسیون") || text.contains("قطع برق") || text.contains("پرمیت") ||
+        text.contains("قفل") || text.contains("تابلو") || text.contains("موتور") || item.executiveUnit == "برق") {
+        tags.add(TaskLogisticsTag("LOTO", "ایزولاسیون برقی/LOTO", "LOTO", "lock", 0xFFE11D48, isHeavyEquipment = false))
+    }
+
+    // Hot Work Permit (پروانه کار گرم / برشکاری و جوشکاری)
+    if (text.contains("جوشکاری") || text.contains("برشکاری") || text.contains("هات ورک") || text.contains("ورق") ||
+        text.contains("شوت") || text.contains("لاینر") || text.contains("تعویض پلیت")) {
+        tags.add(TaskLogisticsTag("HOT_WORK", "پروانه کار گرم و جوشکاری", "کار گرم", "local_fire_department", 0xFFEA580C, isHeavyEquipment = false))
+    }
+
+    // NDT & Quality Inspection (تست و بازرسی فنی)
+    if (text.contains("تست") || text.contains("بازرسی") || text.contains("ndt") || text.contains("ضخامت") ||
+        text.contains("آلتراسونیک") || text.contains("ویبراسیون") || item.executiveUnit == "بازرسی فنی") {
+        tags.add(TaskLogisticsTag("NDT", "بازرسی و کنترل کیفیت NDT", "بازرسی", "verified", 0xFF7C3AED, isHeavyEquipment = false))
+    }
+
+    return tags
+}
+
 enum class WbsViewMode {
     TREE,                // نمایش درختی تو در تو با محاسبات تجمعی
     INDUSTRIAL_MATRIX,   // ساختار صنعتی (واحد -> محوطه -> زون -> تجهیز -> فعالیت)
-    LIST_OUTLINE         // فهرست خطی با تورفتگی کدهای ساختار شکست WBS
+    LIST_OUTLINE,        // فهرست خطی با تورفتگی کدهای ساختار شکست WBS
+    QUICK_REVIEW,        // مرور سریع و آکاردئونی لیست تسک‌ها با جزئیات کامل درجا
+    LOGISTICS_SCHEDULE   // پایش و زمانبندی جرثقیل، داربست و فلاشینگ امروز و فردا
 }
 
 enum class SupervisorFilter {
@@ -160,6 +219,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val selectedStatusFilter = MutableStateFlow<String?>(null)
     val supervisorFilterMode = MutableStateFlow(SupervisorFilter.ALL)
     val showOnlyMyTasks = MutableStateFlow(false)
+    val selectedSupervisorForUnitHead = MutableStateFlow<Long?>(null)
+
+    fun selectSupervisorForUnitHead(userId: Long?) {
+        selectedSupervisorForUnitHead.value = userId
+    }
 
     // حالت‌های باز/بسته بودن درخت دسته‌بندی WBS
     val expandedUnits = MutableStateFlow<Set<String>>(setOf("مکانیک", "برق", "ابزار دقیق", "نسوز", "اتوماسیون"))
@@ -251,17 +315,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val unit: String? = null,
         val status: String? = null,
         val supervisorFilter: SupervisorFilter = SupervisorFilter.ALL,
-        val showOnlyMine: Boolean = false
+        val showOnlyMine: Boolean = false,
+        val selectedSupervisorId: Long? = null
     )
 
     private val filterParams: Flow<TaskFilterParams> = combine(
-        searchQuery,
-        selectedUnitFilter,
-        selectedStatusFilter,
-        supervisorFilterMode,
-        showOnlyMyTasks
-    ) { query, unit, status, supFilter, showMine ->
-        TaskFilterParams(query, unit, status, supFilter, showMine)
+        combine(searchQuery, selectedUnitFilter, selectedStatusFilter) { q, u, s -> Triple(q, u, s) },
+        combine(supervisorFilterMode, showOnlyMyTasks, selectedSupervisorForUnitHead) { f, m, sid -> Triple(f, m, sid) }
+    ) { (query, unit, status), (supFilter, showMine, supId) ->
+        TaskFilterParams(query, unit, status, supFilter, showMine, supId)
     }
 
     // آیتم‌های فیلتر شده بر اساس نقش، واحد، جستجو و فیلترهای روزانه ناظر
@@ -274,6 +336,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val userAssignedItemIds = if (user != null) {
             assignments.filter { it.supervisorUserId == user.id }.map { it.itemId }.toSet()
         } else emptySet()
+
+        val specificSupervisorItemIds = if (params.selectedSupervisorId != null) {
+            assignments.filter { it.supervisorUserId == params.selectedSupervisorId }.map { it.itemId }.toSet()
+        } else null
 
         items.filter { item ->
             // فیلتر جستجو
@@ -306,8 +372,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             val matchesOnlyMine = !params.showOnlyMine || userAssignedItemIds.contains(item.id)
+            val matchesSelectedSupervisor = specificSupervisorItemIds == null || specificSupervisorItemIds.contains(item.id)
 
-            matchesQuery && matchesUnit && matchesStatus && matchesSupervisorMode && matchesOnlyMine
+            matchesQuery && matchesUnit && matchesStatus && matchesSupervisorMode && matchesOnlyMine && matchesSelectedSupervisor
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -446,11 +513,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
 
         targetAreas.map { (key, title, plannedProg) ->
-            val areaTasks = activeItems.filter {
-                it.generalArea.equals(key, ignoreCase = true) ||
-                (key == "Core Area" && (it.generalArea.contains("Core", ignoreCase = true) || it.generalArea.contains("Blower", ignoreCase = true) || it.generalArea.contains("Reformer", ignoreCase = true))) ||
-                (key == "MHU" && it.generalArea.contains("MHU", ignoreCase = true)) ||
-                (key == "WTP" && (it.generalArea.contains("WTP", ignoreCase = true) || it.generalArea.contains("Water", ignoreCase = true)))
+            val areaTasks = activeItems.filter { item ->
+                val ga = item.generalArea.trim()
+                val loc = item.executionLocation.trim()
+                val eq = item.equipmentName.trim()
+                val tit = item.title.trim()
+                when (key) {
+                    "Core Area" -> ga.equals("Core Area", ignoreCase = true) ||
+                            ga.contains("Core", ignoreCase = true) ||
+                            ga.contains("Blower", ignoreCase = true) ||
+                            ga.contains("Reformer", ignoreCase = true) ||
+                            loc.contains("Furnace", ignoreCase = true) ||
+                            eq.contains("کوره") || tit.contains("کوره") ||
+                            (!ga.contains("MHU", ignoreCase = true) && !ga.contains("WTP", ignoreCase = true) && !ga.contains("Water", ignoreCase = true) && !ga.contains("انتقال") && !ga.contains("تصفیه"))
+                    "MHU" -> ga.equals("MHU", ignoreCase = true) ||
+                            ga.contains("MHU", ignoreCase = true) ||
+                            ga.contains("Material", ignoreCase = true) ||
+                            ga.contains("انتقال", ignoreCase = true) ||
+                            loc.contains("MHU", ignoreCase = true) ||
+                            loc.contains("Day Bin", ignoreCase = true) ||
+                            eq.contains("نوار") || tit.contains("نوار") ||
+                            tit.contains("MHU", ignoreCase = true)
+                    "WTP" -> ga.equals("WTP", ignoreCase = true) ||
+                            ga.contains("WTP", ignoreCase = true) ||
+                            ga.contains("Water", ignoreCase = true) ||
+                            ga.contains("تصفیه", ignoreCase = true) ||
+                            loc.contains("Clarifier", ignoreCase = true) ||
+                            loc.contains("Pump", ignoreCase = true) ||
+                            eq.contains("کلاریفایر") || eq.contains("پمپ") ||
+                            tit.contains("آب") || tit.contains("WTP", ignoreCase = true)
+                    else -> ga.equals(key, ignoreCase = true)
+                }
             }
 
             val total = areaTasks.size

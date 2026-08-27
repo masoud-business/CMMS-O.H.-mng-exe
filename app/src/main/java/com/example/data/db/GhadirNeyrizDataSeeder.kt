@@ -200,7 +200,7 @@ object GhadirNeyrizDataSeeder {
             id = 1,
             title = "پروژه جامع اورهال سالیانه کارخانه احیای مستقیم فولاد غدیر نی‌ریز (۱۴۰۴)",
             year = 1404,
-            equipmentType = "مگامدول احیای مستقیم ۸۰۰ هزار تنی با تکنولوژی PERED / Midrex",
+            equipmentType = "مدول احیای آهن اسفنجی ۸۰۰ هزار تنی با تکنولوژی PERED / Midrex",
             plannedStartDate = "1404/10/12",
             plannedEndDate = "1404/10/29",
             actualStartDate = "1404/10/12",
@@ -213,16 +213,20 @@ object GhadirNeyrizDataSeeder {
         val items = getGhadirNeyrizOverhaulItems()
         dao.insertItems(items)
 
-        // 4. تخصیص ناظران به فعالیت‌های WBS
+        // 4. تخصیص ناظران به فعالیت‌های WBS طبق ساختار تفکیک وظایف
         val assignments = mutableListOf<ItemAssignmentEntity>()
         items.forEach { item ->
             when (item.executiveUnit) {
                 "مکانیک" -> {
-                    // توزیع متوازن بین ناظران مکانیک: بقری (7)، فرخ (8)، شجاعی فرد (9)، مبارکی (10)
-                    val supId = when (item.id % 4L) {
-                        0L -> 7L // مهندس بقری
-                        1L -> 8L // مهندس فرخ
-                        2L -> 9L // مهندس شجاعی فرد
+                    // تخصیص هدفمند بر اساس ناحیه و تجهیز طبق دستورالعمل:
+                    // ۱. ناحیه MHU (انتقال مواد و نوارنقاله) -> مهندس بقری (id = 7)
+                    // ۲. ناحیه کوره و Core Area -> مهندس شجاعی فرد (id = 9)
+                    // ۳. کمپرسورها و تجهیزات دوار -> مهندس فرخ (id = 8)
+                    // ۴. سایر نواحی و تجهیزات مکانیک -> مهندس مبارکی (id = 10)
+                    val supId = when {
+                        item.generalArea.equals("MHU", ignoreCase = true) || item.title.contains("MHU") || item.title.contains("نوار") || item.equipmentName.contains("نوار") -> 7L // مهندس بقری
+                        item.equipmentName.contains("کمپرسور") || item.title.contains("کمپرسور") || item.equipmentName.contains("بلور") || item.title.contains("بلوور") -> 8L // مهندس فرخ
+                        item.generalArea.equals("Core Area", ignoreCase = true) && (item.equipmentName.contains("کوره") || item.title.contains("کوره") || item.equipmentName.contains("راکتور") || item.title.contains("لگ") || item.title.contains("وینچ") || item.title.contains("اسکوئر")) -> 9L // مهندس شجاعی فرد
                         else -> 10L // مهندس مبارکی
                     }
                     assignments.add(ItemAssignmentEntity(itemId = item.id, supervisorUserId = supId))
@@ -563,7 +567,7 @@ object GhadirNeyrizDataSeeder {
         }
 
         // 1. Overhaul Root
-        add(1, "1", "اورهال جامع سالیانه کارخانه احیای مستقیم فولاد غدیر نی‌ریز", null, 1, "مدیریت اورهال", "Core Area", "کل سایت", "مگامدول احیا", 180.0, "1404/10/12", "1404/10/29", "in_progress", 34)
+        add(1, "1", "اورهال جامع سالیانه کارخانه احیای مستقیم فولاد غدیر نی‌ریز", null, 1, "مدیریت اورهال", "Core Area", "کل سایت", "مدول احیای آهن اسفنجی", 180.0, "1404/10/12", "1404/10/29", "in_progress", 34)
         add(2, "1.1", "شروع رسمی اورهال و صدور پرمیت‌های ایمنی (LOTO)", 1, 2, "ایمنی و بهره‌برداری", "Core Area", "کل سایت", "پرمیت‌ها", 0.0, "1404/10/12", "1404/10/12", "completed", 100, 4, 2.0)
 
         // ==========================================
