@@ -358,3 +358,47 @@ data class NotificationEntity(
     val linkEntityId: Long? = null,
     val createdAt: String
 )
+
+/**
+ * 11. پرمیت‌های ایمنی کار در کارگاه (Safety & HSE Work Permits)
+ * شامل پرمیت‌های کار گرم، کار در ارتفاع، فضای بسته، ایزولاسیون LOTO، کارت قرمز برق و حفاری
+ */
+@Entity(
+    tableName = "safety_permits",
+    foreignKeys = [
+        ForeignKey(
+            entity = OversightItemEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["itemId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index("itemId"), Index("oversightId"), Index("permitNumber")]
+)
+data class SafetyPermitEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val itemId: Long,
+    val oversightId: Long = 1,
+    val permitNumber: String, // e.g. HSE-1404-101
+    val permitType: String, // "کار گرم (Hot Work)", "فضای بسته (Confined Space)", "کار در ارتفاع (Height)", "ایزولاسیون برقی و LOTO", "حفاری (Excavation)", "مجوز عمومی (Cold Work)"
+    val status: String = "issued", // "issued" (صادر شده), "pending" (در انتظار صدور), "suspended" (متوقف شده), "closed" (پایان کار)
+    val executiveUnit: String, // واحد مجری: مکانیک، برق، نسوز، سیالات...
+    val location: String = "", // موقعیت: Core Area, MHU, WTP...
+    val equipmentName: String = "", // تجهیز مرتبط
+    val issueDate: String, // تاریخ صدور e.g. 1404/10/14
+    val validHours: Int = 8, // مدت اعتبار به ساعت
+    val issuedByUserId: Long,
+    val issuedByUserName: String, // e.g. مهندس رضایی (HSE)
+    val requiresElectricalLoto: Boolean = false, // نیاز به کارت قرمز و قفل LOTO برق
+    val electricalLotoStatus: String = "not_required", // "not_required", "pending_isolation", "isolated_and_tagged", "energized"
+    val electricalTaggedBy: String = "", // تایید کننده واحد برق
+    val requiresGasTest: Boolean = false, // نیاز به تست گاز
+    val gasTestResult: String = "", // نتیجه سنجش O2, CO, LEL
+    val requiresScaffoldingTag: Boolean = false, // نیاز به تگ داربست
+    val fireWatchRequired: Boolean = false, // دیده‌بان آتش
+    val safetyPrecautions: String = "", // اقدامات کنترلی و الزامات HSE
+    val ppeRequirements: String = "کفش ایمنی، کلاه ایمنی، دستکش کار", // تجهیزات حفاظت فردی
+    val createdAt: String = "",
+    val siteId: String = "GHADIR_NEYRIZ"
+)

@@ -44,7 +44,8 @@ fun AppHeader(
     selectedOversightId: Long?,
     onSwitchUser: (UserEntity) -> Unit,
     onSelectOversight: (Long) -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onOpenSettings: () -> Unit = {}
 ) {
     var showUserMenu by remember { mutableStateOf(false) }
     var showOversightMenu by remember { mutableStateOf(false) }
@@ -197,7 +198,21 @@ fun AppHeader(
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    IconButton(
+                        onClick = onOpenSettings,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "تنظیمات برنامه و ظاهر",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
 
                     IconButton(
                         onClick = { showLogoutConfirm = true },
@@ -266,78 +281,83 @@ fun DashboardTab(
     onNavigateToProcurement: () -> Unit,
     onItemClickForDailyUpdate: (OversightItemEntity) -> Unit = {}
 ) {
-    // Current role perspective (defaults to user's real role, but can be switched to preview)
-    var selectedRolePerspective by remember(currentUser?.role) {
-        mutableStateOf(currentUser?.role ?: "admin")
+    // Current role perspective: Admins can preview perspectives, but non-admins are strictly locked to their assigned role
+    val userRole = currentUser?.role ?: "admin"
+    var selectedRolePerspective by remember(userRole) {
+        mutableStateOf(userRole)
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Perspective Switcher Bar
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+        // Perspective Switcher Bar: Only accessible to Admin / Project Manager to prevent unauthorized dashboard access
+        if (userRole == "admin") {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Badge,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "نمای داشبورد بر اساس نقش:",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                val rolesList = listOf(
-                    Triple("admin", "مدیر پروژه", Icons.Default.Dashboard),
-                    Triple("supervisor", "سرپرست کارگاه", Icons.Default.Engineering),
-                    Triple("planner", "کنترل پروژه", Icons.Default.Timeline),
-                    Triple("unit_head", "رئیس واحد", Icons.Default.Analytics)
-                )
-
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    items(rolesList) { (roleKey, roleLabel, roleIcon) ->
-                        val isSelected = selectedRolePerspective == roleKey
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { selectedRolePerspective = roleKey },
-                            label = { Text(roleLabel, fontSize = 10.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = roleIcon,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                            ),
-                            modifier = Modifier.height(30.dp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Badge,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
                         )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "نمای مدیریتی (تغییر پرسپکتیو):",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    val rolesList = listOf(
+                        Triple("admin", "مدیر ارشد پروژه", Icons.Default.Dashboard),
+                        Triple("supervisor", "ناظر اجرایی", Icons.Default.Engineering),
+                        Triple("planner", "کنترل پروژه", Icons.Default.Timeline),
+                        Triple("unit_head", "رئیس واحد", Icons.Default.Analytics)
+                    )
+
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        items(rolesList) { (roleKey, roleLabel, roleIcon) ->
+                            val isSelected = selectedRolePerspective == roleKey
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { selectedRolePerspective = roleKey },
+                                label = { Text(roleLabel, fontSize = 10.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = roleIcon,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                ),
+                                modifier = Modifier.height(30.dp)
+                            )
+                        }
                     }
                 }
             }
         }
 
-        // Conditional UI Dashboard based on selected Role Perspective
+        // Active Dashboard strictly matching the user's role (or selected perspective for Admin)
+        val activeRole = if (userRole == "admin") selectedRolePerspective else userRole
+
         Box(modifier = Modifier.weight(1f)) {
-            when (selectedRolePerspective) {
+            when (activeRole) {
                 "supervisor" -> {
                     ShopFloorSupervisorDashboard(
                         currentUser = currentUser ?: UserEntity(name = "مهندس بقری", role = "supervisor", unit = "مکانیک", email = ""),
@@ -373,10 +393,12 @@ fun DashboardTab(
                         unitAnalytics = unitAnalytics,
                         areaAnalyticsList = areaAnalyticsList,
                         allUsers = allUsers,
+                        rawItems = rawItems,
                         oversight = oversight,
                         onNavigateToWbs = onNavigateToWbs,
                         onNavigateToEodSync = onNavigateToEodSync,
-                        onNavigateToProcurement = onNavigateToProcurement
+                        onNavigateToProcurement = onNavigateToProcurement,
+                        onItemClickForUpdate = onItemClickForDailyUpdate
                     )
                 }
                 else -> {
@@ -2326,19 +2348,27 @@ fun SessionsDecisionsTab(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // 1. Top Header & Action
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "جلسات هماهنگی و تصمیمات اورهال",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+                Column {
+                    Text(
+                        text = "جلسات هماهنگی و مصوبات اورهال",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "ثبت صورت‌جلسات، تصمیمات اجرایی و پیگیری تکالیف واحدها",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
                 if (currentUser?.role == "admin" || currentUser?.role == "planner") {
                     Button(
@@ -2348,7 +2378,40 @@ fun SessionsDecisionsTab(
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("ثبت جلسه جدید", fontSize = 12.sp)
+                        Text("ثبت جلسه جدید", fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+
+        // 2. High-Density KPI Metric Strip
+        item {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("کل جلسات", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${sessions.size}", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = IndustrialSteelBlue)
+                    }
+                    Divider(modifier = Modifier.height(24.dp).width(1.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("مصوبات ثبت‌شده", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${decisions.size}", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = IndustrialEmerald)
+                    }
+                    Divider(modifier = Modifier.height(24.dp).width(1.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("نکات و یادداشت‌ها", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${notes.size}", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = IndustrialNavy)
                     }
                 }
             }
@@ -2359,10 +2422,10 @@ fun SessionsDecisionsTab(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(40.dp),
+                        .padding(32.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("هیچ جلسه هماهنگی ثبت نشده است.", color = Color.Gray)
+                    Text("هیچ جلسه هماهنگی ثبت نشده است.", color = Color.Gray, fontSize = 12.sp)
                 }
             }
         }
@@ -2378,13 +2441,27 @@ fun SessionsDecisionsTab(
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    // Header Row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(session.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Surface(
+                                shape = CircleShape,
+                                color = IndustrialSteelBlue.copy(alpha = 0.12f),
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.Groups, contentDescription = null, tint = IndustrialSteelBlue, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(session.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                        }
+
                         Surface(
                             shape = RoundedCornerShape(6.dp),
                             color = MaterialTheme.colorScheme.primaryContainer
@@ -2392,26 +2469,35 @@ fun SessionsDecisionsTab(
                             Text(
                                 text = "${session.sessionDate} • ${session.location}",
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                fontSize = 11.sp,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         }
                     }
 
+                    // Summary Section
                     if (session.minutesSummary.isNotBlank()) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = session.minutesSummary,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = session.minutesSummary,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(8.dp)
+                            )
+                        }
                     }
-
-                    Spacer(modifier = Modifier.height(12.dp))
 
                     // Decisions List
                     if (sessionDecs.isNotEmpty()) {
-                        Text("تصمیمات مصوب جلسه:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = IndustrialEmerald)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("مصوبات اجرایی جلسه:", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = IndustrialEmerald)
                         Spacer(modifier = Modifier.height(4.dp))
                         sessionDecs.forEach { dec ->
                             Surface(
@@ -2422,14 +2508,14 @@ fun SessionsDecisionsTab(
                                     .padding(vertical = 2.dp)
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(8.dp),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Default.Check, contentDescription = null, tint = IndustrialEmerald, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = IndustrialEmerald, modifier = Modifier.size(15.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "${dec.decisionText} (واحد مسئول: ${dec.assignedUnit})",
-                                        fontSize = 12.sp,
+                                        text = "${dec.decisionText}  [مسئول: ${dec.assignedUnit}]",
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.Medium
                                     )
                                 }
@@ -2440,18 +2526,19 @@ fun SessionsDecisionsTab(
                     // Notes List
                     if (sessionNts.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(6.dp))
-                        Text("یادداشت‌ها و نکات مطرح‌شده:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = IndustrialNavy)
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("نکات و تذکرات مطرح‌شده:", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = IndustrialNavy)
+                        Spacer(modifier = Modifier.height(3.dp))
                         sessionNts.forEach { nt ->
                             Text(
                                 text = "• ${nt.noteText} (${nt.authorName})",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(vertical = 1.dp)
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     // Action buttons
                     Row(
@@ -2461,21 +2548,25 @@ fun SessionsDecisionsTab(
                         if (currentUser?.role == "admin" || currentUser?.role == "planner") {
                             OutlinedButton(
                                 onClick = { onAddDecision(session.id) },
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                 shape = RoundedCornerShape(6.dp),
-                                modifier = Modifier.height(30.dp)
+                                modifier = Modifier.height(28.dp)
                             ) {
-                                Text("+ ثبت مصوبه", fontSize = 11.sp)
+                                Icon(Icons.Default.AddCircleOutline, contentDescription = null, modifier = Modifier.size(13.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("ثبت مصوبه", fontSize = 10.sp)
                             }
                             Spacer(modifier = Modifier.width(6.dp))
                         }
                         OutlinedButton(
                             onClick = { onAddNote(session.id) },
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                             shape = RoundedCornerShape(6.dp),
-                            modifier = Modifier.height(30.dp)
+                            modifier = Modifier.height(28.dp)
                         ) {
-                            Text("+ یادداشت", fontSize = 11.sp)
+                            Icon(Icons.Default.NoteAdd, contentDescription = null, modifier = Modifier.size(13.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("یادداشت", fontSize = 10.sp)
                         }
                     }
                 }
@@ -2498,23 +2589,43 @@ fun ProcurementTab(
     onRejectRequest: (Long, String) -> Unit,
     onUpdateStatus: (Long, String) -> Unit
 ) {
+    var selectedStatusFilter by remember { mutableStateOf("all") }
+
+    val filteredProcurements = remember(procurements, selectedStatusFilter) {
+        when (selectedStatusFilter) {
+            "requested" -> procurements.filter { it.status == "requested" }
+            "approved" -> procurements.filter { it.status == "approved" || it.status == "ordered" }
+            "received" -> procurements.filter { it.status == "received" }
+            "rejected" -> procurements.filter { it.status == "rejected" }
+            else -> procurements
+        }
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // 1. Top Header & Action
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "مدیریت تأمین قطعات یدکی و پیمانکاران",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+                Column {
+                    Text(
+                        text = "مدیریت تأمین قطعات یدکی و اقلام بحرانی",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "پایش چرخه درخواست، سفارش‌گذاری و تحویل قطعات به کارگاه",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
                 Button(
                     onClick = onAddRequest,
@@ -2523,25 +2634,87 @@ fun ProcurementTab(
                 ) {
                     Icon(Icons.Default.AddShoppingCart, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("درخواست تأمین", fontSize = 12.sp)
+                    Text("درخواست تأمین", fontSize = 11.sp)
                 }
             }
         }
 
-        if (procurements.isEmpty()) {
+        // 2. High-Density KPI Metric Strip
+        item {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("کل اقلام", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${procurements.size}", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = IndustrialSteelBlue)
+                    }
+                    Divider(modifier = Modifier.height(24.dp).width(1.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("در انتظار تأیید", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${procurements.count { it.status == "requested" }}", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = IndustrialAmberDark)
+                    }
+                    Divider(modifier = Modifier.height(24.dp).width(1.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("تأیید و خرید", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${procurements.count { it.status == "approved" || it.status == "ordered" }}", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF1E88E5))
+                    }
+                    Divider(modifier = Modifier.height(24.dp).width(1.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("تحویل سایت", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${procurements.count { it.status == "received" }}", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = IndustrialEmerald)
+                    }
+                }
+            }
+        }
+
+        // 3. Status Filter Chips
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                listOf(
+                    Pair("all", "همه (${procurements.size})"),
+                    Pair("requested", "در انتظار بررسی (${procurements.count { it.status == "requested" }})"),
+                    Pair("approved", "سفارش و تأمین (${procurements.count { it.status == "approved" || it.status == "ordered" }})"),
+                    Pair("received", "تحویل سایت (${procurements.count { it.status == "received" }})")
+                ).forEach { (key, label) ->
+                    val isSelected = selectedStatusFilter == key
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { selectedStatusFilter = key },
+                        label = { Text(label, fontSize = 10.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                        modifier = Modifier.height(28.dp)
+                    )
+                }
+            }
+        }
+
+        if (filteredProcurements.isEmpty()) {
             item {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(40.dp),
+                        .padding(32.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("هیچ درخواست خریدی ثبت نشده است.", color = Color.Gray)
+                    Text("هیچ درخواستی با این فیلتر یافت نشد.", color = Color.Gray, fontSize = 12.sp)
                 }
             }
         }
 
-        items(procurements, key = { it.id }) { req ->
+        items(filteredProcurements, key = { it.id }) { req ->
             Surface(
                 shape = RoundedCornerShape(14.dp),
                 color = MaterialTheme.colorScheme.surface,
@@ -2550,14 +2723,33 @@ fun ProcurementTab(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
+                    // Row 1: Title & Status Badge
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(req.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Surface(
+                                shape = CircleShape,
+                                color = IndustrialSteelBlue.copy(alpha = 0.12f),
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.Build,
+                                        contentDescription = null,
+                                        tint = IndustrialSteelBlue,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(req.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                        }
+
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(6.dp),
                             color = when (req.status) {
                                 "approved", "ordered", "received" -> IndustrialEmerald.copy(alpha = 0.15f)
                                 "rejected" -> MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
@@ -2574,7 +2766,7 @@ fun ProcurementTab(
                                     else -> req.status
                                 },
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                fontSize = 11.sp,
+                                fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = when (req.status) {
                                     "approved", "ordered", "received" -> IndustrialEmerald
@@ -2585,14 +2777,91 @@ fun ProcurementTab(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "نوع: ${req.itemType} • مقدار: ${req.quantity} • برآورد هزینه: ${req.estimatedCost} • درخواست‌کننده: ${req.requestedByUserName}",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                    // Planner / Admin Actions
+                    // Row 2: Structured Details Grid
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text("نوع کالا / قطعه:", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(req.itemType, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                            }
+                            Column {
+                                Text("تعداد / مقدار:", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${req.quantity}", fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                            }
+                            Column {
+                                Text("برآورد هزینه:", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(req.estimatedCost, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                            }
+                            Column {
+                                Text("درخواست‌کننده:", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(req.requestedByUserName, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    }
+
+                    // Row 3: 4-Stage Mini Tracker
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        val stages = listOf("درخواست", "تأیید برنامه", "خرید/تأمین", "تحویل کارگاه")
+                        val currentStageIdx = when (req.status) {
+                            "requested" -> 0
+                            "approved" -> 1
+                            "ordered" -> 2
+                            "received" -> 3
+                            else -> 0
+                        }
+
+                        stages.forEachIndexed { idx, stageLabel ->
+                            val isDone = idx <= currentStageIdx && req.status != "rejected"
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(14.dp)
+                                        .background(
+                                            if (isDone) IndustrialEmerald else MaterialTheme.colorScheme.outlineVariant,
+                                            CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (isDone) {
+                                        Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(10.dp))
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = stageLabel,
+                                    fontSize = 9.sp,
+                                    color = if (isDone) IndustrialEmerald else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = if (isDone) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                            if (idx < stages.size - 1) {
+                                Divider(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(horizontal = 4.dp),
+                                    color = if (idx < currentStageIdx && req.status != "rejected") IndustrialEmerald else MaterialTheme.colorScheme.outlineVariant
+                                )
+                            }
+                        }
+                    }
+
+                    // Row 4: Planner / Admin Action Buttons
                     if ((currentUser?.role == "admin" || currentUser?.role == "planner") && req.status == "requested") {
                         Spacer(modifier = Modifier.height(10.dp))
                         Row(
@@ -2603,18 +2872,36 @@ fun ProcurementTab(
                                 onClick = { onRejectRequest(req.id, "عدم اولویت در این شیفت") },
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                                 shape = RoundedCornerShape(6.dp),
-                                modifier = Modifier.height(32.dp)
+                                modifier = Modifier.height(30.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
                             ) {
-                                Text("رد درخواست", fontSize = 11.sp)
+                                Text("رد درخواست", fontSize = 10.sp)
                             }
                             Spacer(modifier = Modifier.width(8.dp))
                             Button(
                                 onClick = { onApproveRequest(req.id) },
                                 colors = ButtonDefaults.buttonColors(containerColor = IndustrialEmerald),
                                 shape = RoundedCornerShape(6.dp),
-                                modifier = Modifier.height(32.dp)
+                                modifier = Modifier.height(30.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
                             ) {
-                                Text("تأیید خرید", fontSize = 11.sp)
+                                Text("تأیید خرید", fontSize = 10.sp)
+                            }
+                        }
+                    } else if (req.status == "approved" && (currentUser?.role == "admin" || currentUser?.role == "planner")) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            OutlinedButton(
+                                onClick = { onUpdateStatus(req.id, "received") },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = IndustrialEmerald),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.height(28.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text("اعلام تحویل به سایت", fontSize = 10.sp)
                             }
                         }
                     }

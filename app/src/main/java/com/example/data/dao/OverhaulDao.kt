@@ -23,6 +23,9 @@ interface OverhaulDao {
     @Query("SELECT * FROM users WHERE username = :username AND password = :password LIMIT 1")
     suspend fun login(username: String, password: String): UserEntity?
 
+    @Query("UPDATE users SET password = :newPassword WHERE id = :userId")
+    suspend fun updatePassword(userId: Long, newPassword: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertUser(user: UserEntity): Long
 
@@ -245,4 +248,41 @@ interface OverhaulDao {
 
     @Query("UPDATE notifications SET isRead = 1 WHERE id = :id")
     suspend fun markNotificationRead(id: Long)
+
+    // --- Safety & HSE Work Permits (پرمیت‌های ایمنی و LOTO) ---
+    @Query("SELECT * FROM safety_permits ORDER BY id DESC")
+    fun getAllSafetyPermits(): Flow<List<SafetyPermitEntity>>
+
+    @Query("SELECT * FROM safety_permits WHERE oversightId = :oversightId ORDER BY id DESC")
+    fun getSafetyPermitsForOversight(oversightId: Long): Flow<List<SafetyPermitEntity>>
+
+    @Query("SELECT * FROM safety_permits WHERE itemId = :itemId LIMIT 1")
+    fun getSafetyPermitForItem(itemId: Long): Flow<SafetyPermitEntity?>
+
+    @Query("SELECT * FROM safety_permits WHERE itemId = :itemId LIMIT 1")
+    suspend fun getSafetyPermitForItemDirect(itemId: Long): SafetyPermitEntity?
+
+    @Query("SELECT * FROM safety_permits WHERE id = :id LIMIT 1")
+    suspend fun getSafetyPermitById(id: Long): SafetyPermitEntity?
+
+    @Query("SELECT * FROM safety_permits WHERE requiresElectricalLoto = 1 ORDER BY id DESC")
+    fun getElectricalLotoPermits(): Flow<List<SafetyPermitEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSafetyPermit(permit: SafetyPermitEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSafetyPermits(permits: List<SafetyPermitEntity>): List<Long>
+
+    @Update
+    suspend fun updateSafetyPermit(permit: SafetyPermitEntity)
+
+    @Query("UPDATE safety_permits SET status = :status WHERE id = :id")
+    suspend fun updateSafetyPermitStatus(id: Long, status: String)
+
+    @Query("UPDATE safety_permits SET electricalLotoStatus = :status, electricalTaggedBy = :taggedBy WHERE id = :id")
+    suspend fun updateElectricalLotoStatus(id: Long, status: String, taggedBy: String)
+
+    @Query("DELETE FROM safety_permits WHERE id = :id")
+    suspend fun deleteSafetyPermitById(id: Long)
 }

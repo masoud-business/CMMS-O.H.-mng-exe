@@ -24,9 +24,10 @@ import kotlinx.coroutines.launch
         SessionDecisionEntity::class,
         ProcurementRequestEntity::class,
         AuditLogEntity::class,
-        NotificationEntity::class
+        NotificationEntity::class,
+        SafetyPermitEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

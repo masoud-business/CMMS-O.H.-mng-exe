@@ -45,9 +45,17 @@ fun getNavigationTabsForRole(
     blockedTaskCount: Int = 0
 ): List<RoleTabConfig> {
     return when (user?.role?.lowercase()) {
+        "hse" -> listOf(
+            RoleTabConfig(AppTab.SAFETY_PERMITS, "میز پرمیت و HSE", Icons.Default.HealthAndSafety),
+            RoleTabConfig(AppTab.WBS, "پایش کارهای امروز", Icons.Default.AccountTree),
+            RoleTabConfig(AppTab.DASHBOARD, "شاخص‌های ایمنی", Icons.Default.Shield),
+            RoleTabConfig(AppTab.SESSIONS, "جلسات هماهنگی", Icons.Default.Groups),
+            RoleTabConfig(AppTab.AUDIT, "لاگ‌های ممیزی", Icons.Default.Assessment)
+        )
         "supervisor" -> listOf(
             RoleTabConfig(AppTab.DASHBOARD, "میز کارگاه", Icons.Default.Engineering, badgeCount = blockedTaskCount),
             RoleTabConfig(AppTab.WBS, "وظایف شیفت", Icons.Default.Checklist),
+            RoleTabConfig(AppTab.SAFETY_PERMITS, "پرمیت‌های ایمنی", Icons.Default.HealthAndSafety),
             RoleTabConfig(AppTab.MSP_SYNC, "ثبت کارکرد", Icons.Default.AssignmentTurnedIn),
             RoleTabConfig(AppTab.PROCUREMENT, "قطعات کارگاه", Icons.Default.Build),
             RoleTabConfig(AppTab.SESSIONS, "مصوبات شیفت", Icons.Default.Notes)
@@ -55,6 +63,7 @@ fun getNavigationTabsForRole(
         "planner" -> listOf(
             RoleTabConfig(AppTab.DASHBOARD, "کنترل پروژه", Icons.Default.Timeline),
             RoleTabConfig(AppTab.WBS, "مدیریت WBS", Icons.Default.AccountTree),
+            RoleTabConfig(AppTab.SAFETY_PERMITS, "مجوزهای HSE", Icons.Default.HealthAndSafety),
             RoleTabConfig(AppTab.MSP_SYNC, "تسویه MSP", Icons.Default.SyncAlt, badgeCount = pendingSyncCount),
             RoleTabConfig(AppTab.SESSIONS, "صورتجلسات", Icons.Default.Groups),
             RoleTabConfig(AppTab.PROCUREMENT, "پایش تامین", Icons.Default.ShoppingCart)
@@ -62,6 +71,7 @@ fun getNavigationTabsForRole(
         "unit_head" -> listOf(
             RoleTabConfig(AppTab.DASHBOARD, "داشبورد واحد", Icons.Default.Analytics),
             RoleTabConfig(AppTab.WBS, "کارهای واحد", Icons.Default.AccountTree),
+            RoleTabConfig(AppTab.SAFETY_PERMITS, "پرمیت‌ها و LOTO", Icons.Default.HealthAndSafety),
             RoleTabConfig(AppTab.MSP_SYNC, "تاییدیه شیفت", Icons.Default.FactCheck),
             RoleTabConfig(AppTab.SESSIONS, "جلسات واحدها", Icons.Default.Groups),
             RoleTabConfig(AppTab.PROCUREMENT, "درخواست قطعه", Icons.Default.ShoppingCart)
@@ -70,6 +80,7 @@ fun getNavigationTabsForRole(
             // Admin / Project Manager (مدیر ارشد و مدیر پروژه)
             RoleTabConfig(AppTab.DASHBOARD, "داشبورد کلان", Icons.Default.Dashboard),
             RoleTabConfig(AppTab.WBS, "ساختار WBS", Icons.Default.AccountTree),
+            RoleTabConfig(AppTab.SAFETY_PERMITS, "پرمیت‌های ایمنی", Icons.Default.HealthAndSafety),
             RoleTabConfig(AppTab.MSP_SYNC, "کنترل MSP", Icons.Default.SyncAlt),
             RoleTabConfig(AppTab.SESSIONS, "جلسات و تصمیمات", Icons.Default.Groups),
             RoleTabConfig(AppTab.PROCUREMENT, "تدارکات و خرید", Icons.Default.ShoppingCart),
@@ -95,11 +106,20 @@ fun ShopFloorSupervisorDashboard(
     onItemClickForUpdate: (OversightItemEntity) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Filter tasks specific to this supervisor or their unit
+    // Filter tasks specific to this supervisor
     val userUnit = currentUser.unit ?: "مکانیک"
-    val unitTasks = remember(rawItems, userUnit, currentUser.name) {
-        rawItems.filter { item ->
+    val unitTasks = remember(rawItems, userUnit, currentUser.id, currentUser.name) {
+        val baseUnitTasks = rawItems.filter { item ->
             item.executiveUnit.contains(userUnit) || item.title.contains(userUnit)
+        }
+        when (currentUser.id) {
+            7L -> baseUnitTasks.filter { it.generalArea.equals("MHU", true) || it.title.contains("MHU") || it.title.contains("نوار") || it.equipmentName.contains("نوار") }
+            8L -> baseUnitTasks.filter { it.equipmentName.contains("کمپرسور") || it.title.contains("کمپرسور") || it.equipmentName.contains("بلور") || it.title.contains("بلوور") }
+            9L -> baseUnitTasks.filter { it.generalArea.equals("Core Area", true) && (it.equipmentName.contains("کوره") || it.title.contains("کوره") || it.equipmentName.contains("راکتور") || it.title.contains("لگ") || it.title.contains("وینچ") || it.title.contains("اسکوئر")) }
+            10L -> baseUnitTasks.filter { item ->
+                !(item.generalArea.equals("MHU", true) || item.title.contains("نوار") || item.equipmentName.contains("کمپرسور") || (item.generalArea.equals("Core Area", true) && (item.equipmentName.contains("کوره") || item.title.contains("کوره"))))
+            }
+            else -> baseUnitTasks
         }
     }
 
@@ -909,13 +929,66 @@ fun UnitHeadExecutiveDashboard(
     unitAnalytics: UnitAnalytics,
     areaAnalyticsList: List<AreaAnalytics>,
     allUsers: List<UserEntity>,
+    rawItems: List<OversightItemEntity>,
     oversight: OversightEntity?,
+    electricalLotoPermits: List<SafetyPermitEntity> = emptyList(),
     onNavigateToWbs: () -> Unit,
     onNavigateToEodSync: () -> Unit,
     onNavigateToProcurement: () -> Unit,
+    onItemClickForUpdate: (OversightItemEntity) -> Unit = {},
+    onUpdateLotoStatus: (Long, String, String) -> Unit = { _, _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val unitName = currentUser.unit ?: "مکانیک"
+
+    // 1. Find all supervisors belonging to this unit
+    val unitSupervisors = remember(allUsers, unitName) {
+        allUsers.filter { user ->
+            user.role.equals("supervisor", ignoreCase = true) &&
+            (user.unit?.contains(unitName) == true || unitName.contains(user.unit ?: ""))
+        }
+    }
+
+    var selectedSupervisorId by remember { mutableStateOf<Long?>(null) } // null = All Supervisors in this Unit
+    var selectedStatusFilter by remember { mutableStateOf("all") } // "all", "in_progress", "blocked", "completed"
+
+    // 2. Unit-level items (Isolated strictly to this unit)
+    val unitTasks = remember(rawItems, unitName) {
+        rawItems.filter { it.executiveUnit.contains(unitName) || it.title.contains(unitName) }
+    }
+
+    // 3. Filter tasks by selected Supervisor
+    val supervisorFilteredTasks = remember(unitTasks, selectedSupervisorId) {
+        if (selectedSupervisorId == null) {
+            unitTasks
+        } else {
+            when (selectedSupervisorId) {
+                7L -> unitTasks.filter { it.generalArea.equals("MHU", true) || it.title.contains("MHU") || it.title.contains("نوار") || it.equipmentName.contains("نوار") }
+                8L -> unitTasks.filter { it.equipmentName.contains("کمپرسور") || it.title.contains("کمپرسور") || it.equipmentName.contains("بلور") || it.title.contains("بلوور") }
+                9L -> unitTasks.filter { it.generalArea.equals("Core Area", true) && (it.equipmentName.contains("کوره") || it.title.contains("کوره") || it.equipmentName.contains("راکتور") || it.title.contains("لگ") || it.title.contains("وینچ") || it.title.contains("اسکوئر")) }
+                10L -> unitTasks.filter { item ->
+                    !(item.generalArea.equals("MHU", true) || item.title.contains("نوار") || item.equipmentName.contains("کمپرسور") || (item.generalArea.equals("Core Area", true) && (item.equipmentName.contains("کوره") || item.title.contains("کوره"))))
+                }
+                12L -> unitTasks.filter { it.executiveUnit.contains("برق") }
+                14L -> unitTasks.filter { it.executiveUnit.contains("ابزاردقیق") }
+                15L -> unitTasks.filter { it.executiveUnit.contains("نسوز") }
+                16L -> unitTasks.filter { it.executiveUnit.contains("انرژی") || it.executiveUnit.contains("سیالات") }
+                17L -> unitTasks.filter { it.executiveUnit.contains("بازرسی") }
+                else -> unitTasks
+            }
+        }
+    }
+
+    val displayTasks = remember(supervisorFilteredTasks, selectedStatusFilter) {
+        when (selectedStatusFilter) {
+            "in_progress" -> supervisorFilteredTasks.filter { it.progressPercentage in 1..99 }
+            "blocked" -> supervisorFilteredTasks.filter { it.issues.isNotBlank() }
+            "completed" -> supervisorFilteredTasks.filter { it.progressPercentage >= 100 }
+            else -> supervisorFilteredTasks
+        }
+    }
+
+    val activeSupervisor = unitSupervisors.firstOrNull { it.id == selectedSupervisorId }
 
     LazyColumn(
         modifier = modifier
@@ -923,7 +996,7 @@ fun UnitHeadExecutiveDashboard(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Unit Head Banner
+        // 1. Unit Head Executive Banner
         item {
             Surface(
                 shape = RoundedCornerShape(20.dp),
@@ -931,7 +1004,7 @@ fun UnitHeadExecutiveDashboard(
                 shadowElevation = 4.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(20.dp)) {
+                Column(modifier = Modifier.padding(18.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -943,7 +1016,7 @@ fun UnitHeadExecutiveDashboard(
                                 color = Color.White.copy(alpha = 0.2f)
                             ) {
                                 Text(
-                                    text = "داشبورد تخصصی و مدیریتی واحد $unitName",
+                                    text = "داشبورد تخصصی مدیریت واحد $unitName",
                                     color = Color.White,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
@@ -959,11 +1032,11 @@ fun UnitHeadExecutiveDashboard(
                             )
                         }
 
-                        // Progress Badge
+                        // Progress Gauge
                         Box(contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(
                                 progress = { unitAnalytics.progressPercentage / 100f },
-                                modifier = Modifier.size(58.dp),
+                                modifier = Modifier.size(56.dp),
                                 color = Color.White,
                                 trackColor = Color.White.copy(alpha = 0.25f),
                                 strokeWidth = 5.dp
@@ -987,45 +1060,377 @@ fun UnitHeadExecutiveDashboard(
                     ) {
                         Column {
                             Text("کل تسک‌های واحد", color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp)
-                            Text("${unitAnalytics.totalTasks} فعالیت", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("${unitTasks.size} فعالیت", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         }
                         Column {
                             Text("تکمیل شده", color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp)
-                            Text("${unitAnalytics.completedTasks} تسک", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("${unitTasks.count { it.progressPercentage >= 100 }} تسک", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         }
                         Column {
-                            Text("نفرات فعال واحد", color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp)
-                            Text("${unitAnalytics.totalManpower} نفر", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("دارای مانع", color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp)
+                            Text("${unitTasks.count { it.issues.isNotBlank() }} تسک", color = Color(0xFFFFD2D2), fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         }
                         Column {
-                            Text("شاخص عملکرد SPI", color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp)
-                            Text("${String.format("%.2f", unitAnalytics.spi)}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("تعداد ناظران شیفت", color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp)
+                            Text("${unitSupervisors.size} ناظر اجرایی", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         }
                     }
                 }
             }
         }
 
-        // Unit Execution Detail Card
+        // 2. Supervisor Filter Bar (فیلتر بر اساس ناظران اجرایی واحد)
         item {
-            UnitExecutionDashboardCard(
-                unitAnalytics = unitAnalytics,
-                allUsers = allUsers,
-                selectedUnitName = unitName,
-                onSelectUnit = {}
-            )
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                shadowElevation = 2.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.FilterAlt,
+                                contentDescription = null,
+                                tint = IndustrialEmerald,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "فیلتر وظایف بر اساس ناظران اجرایی واحد $unitName",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                        }
+
+                        if (selectedSupervisorId != null) {
+                            TextButton(
+                                onClick = { selectedSupervisorId = null },
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text("نمایش همه ناظران", fontSize = 11.sp)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // "All" option
+                        item {
+                            val isAllSelected = selectedSupervisorId == null
+                            FilterChip(
+                                selected = isAllSelected,
+                                onClick = { selectedSupervisorId = null },
+                                label = { Text("همه ناظران (${unitTasks.size})", fontSize = 11.sp, fontWeight = if (isAllSelected) FontWeight.Bold else FontWeight.Normal) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Groups,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = IndustrialEmerald.copy(alpha = 0.15f),
+                                    selectedLabelColor = IndustrialEmerald
+                                )
+                            )
+                        }
+
+                        items(unitSupervisors, key = { it.id }) { sup ->
+                            val isSelected = selectedSupervisorId == sup.id
+                            val supDomain = when (sup.id) {
+                                7L -> "نوارنقاله و MHU"
+                                8L -> "کمپرسورها و پکیج گاز"
+                                9L -> "کوره و راکتور احیا"
+                                10L -> "تجهیزات عمومی"
+                                12L -> "پست‌های برق و MCC"
+                                14L -> "اتوماسیون و ابزاردقیق"
+                                15L -> "نسوزکاری و آجرچینی"
+                                else -> sup.unit ?: "کارگاه"
+                            }
+
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { selectedSupervisorId = if (isSelected) null else sup.id },
+                                label = {
+                                    Column {
+                                        Text(sup.name, fontSize = 11.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+                                        Text(supDomain, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Person,
+                                        contentDescription = null,
+                                        tint = if (isSelected) IndustrialEmerald else Color.Gray,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = IndustrialEmerald.copy(alpha = 0.15f),
+                                    selectedLabelColor = IndustrialEmerald
+                                )
+                            )
+                        }
+                    }
+                }
+            }
         }
 
-        // Area Distribution for this unit
-        item {
-            AreaExecutionDashboardCard(
-                areaList = areaAnalyticsList,
-                selectedAreaKey = "Core Area",
-                onSelectArea = {}
-            )
+        // 3. Selected Supervisor Spotlight Card (when a supervisor is chosen)
+        if (activeSupervisor != null) {
+            val supTasks = supervisorFilteredTasks
+            val supProgress = if (supTasks.isNotEmpty()) supTasks.map { it.progressPercentage }.average().toInt() else 0
+            val supManpower = supTasks.sumOf { it.manpowerCount }
+            val supBlocked = supTasks.count { it.issues.isNotBlank() }
+
+            item {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = IndustrialSteelBlue.copy(alpha = 0.08f),
+                    border = BorderStroke(1.dp, IndustrialSteelBlue.copy(alpha = 0.3f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                shape = CircleShape,
+                                color = IndustrialSteelBlue.copy(alpha = 0.2f),
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.Engineering, contentDescription = null, tint = IndustrialSteelBlue)
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "کارهای شیفت امروز: ${activeSupervisor.name}",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                                Text(
+                                    text = "تعداد تسک: ${supTasks.size} • نفرات: $supManpower نفر • موانع: $supBlocked",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = IndustrialEmerald.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = "میانگین: $supProgress%",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = IndustrialEmerald,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
         }
 
-        // Action shortcuts
+        // 3.5. Special Electrical LOTO & Red Card Desk (سامانه پایش کارت‌های قرمز و ایزولاسیون برای واحد برق)
+        if (unitName.contains("برق") || currentUser.unit?.contains("برق") == true || electricalLotoPermits.isNotEmpty()) {
+            item {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0xFFDC2626).copy(alpha = 0.08f),
+                    border = BorderStroke(1.5.dp, Color(0xFFDC2626).copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Color(0xFFDC2626).copy(alpha = 0.2f),
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Default.Bolt, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(20.dp))
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = "سامانه کارت قرمز و ایزولاسیون الکتریکی (LOTO Desk)",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = Color(0xFFDC2626)
+                                    )
+                                    Text(
+                                        text = "پایش فعالیت‌های نیازمند قطع برق در تمام واحدهای مجتمع",
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            val pendingLotoCount = electricalLotoPermits.count { it.electricalLotoStatus != "isolated_and_tagged" }
+                            if (pendingLotoCount > 0) {
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Color(0xFFDC2626)
+                                ) {
+                                    Text(
+                                        text = "$pendingLotoCount نیاز به قطع برق",
+                                        color = Color.White,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        if (electricalLotoPermits.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                electricalLotoPermits.forEach { lotoPermit ->
+                                    val isIsolated = lotoPermit.electricalLotoStatus == "isolated_and_tagged"
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = MaterialTheme.colorScheme.surface,
+                                        border = BorderStroke(1.dp, if (isIsolated) Color(0xFF10B981).copy(alpha = 0.5f) else Color(0xFFDC2626).copy(alpha = 0.5f)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(10.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = "پرمیت ${lotoPermit.permitNumber}: ${lotoPermit.equipmentName}",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 11.sp
+                                                )
+                                                Text(
+                                                    text = "واحد درخواست‌کننده: ${lotoPermit.executiveUnit} • موقعیت: ${lotoPermit.location}",
+                                                    fontSize = 10.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+
+                                            if (!isIsolated) {
+                                                Button(
+                                                    onClick = { onUpdateLotoStatus(lotoPermit.id, "isolated_and_tagged", currentUser.name) },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                    shape = RoundedCornerShape(8.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(13.dp))
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text("نصب کارت قرمز و قفل", fontSize = 10.sp)
+                                                }
+                                            } else {
+                                                Surface(
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    color = Color(0xFF10B981).copy(alpha = 0.15f)
+                                                ) {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                                    ) {
+                                                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(13.dp))
+                                                        Spacer(modifier = Modifier.width(3.dp))
+                                                        Text(
+                                                            text = "ایزوله شد (${lotoPermit.electricalTaggedBy})",
+                                                            fontSize = 10.sp,
+                                                            color = Color(0xFF10B981),
+                                                            fontWeight = FontWeight.Bold
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Status Filter Chips
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                listOf(
+                    Pair("all", "همه (${supervisorFilteredTasks.size})"),
+                    Pair("in_progress", "در حال اجرا (${supervisorFilteredTasks.count { it.progressPercentage in 1..99 }})"),
+                    Pair("blocked", "دارای مانع (${supervisorFilteredTasks.count { it.issues.isNotBlank() }})"),
+                    Pair("completed", "تکمیل شده (${supervisorFilteredTasks.count { it.progressPercentage >= 100 }})")
+                ).forEach { (key, label) ->
+                    val isSelected = selectedStatusFilter == key
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { selectedStatusFilter = key },
+                        label = { Text(label, fontSize = 11.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                        modifier = Modifier.height(30.dp)
+                    )
+                }
+            }
+        }
+
+        // 5. Task Cards List
+        if (displayTasks.isEmpty()) {
+            item {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "هیچ فعالیتی با فیلتر انتخاب‌شده برای این ناظر یا واحد یافت نشد.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(20.dp),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        } else {
+            items(displayTasks, key = { it.id }) { task ->
+                SupervisorTaskItemCard(
+                    task = task,
+                    onUpdateClick = { onItemClickForUpdate(task) }
+                )
+            }
+        }
+
+        // 6. Action Shortcuts
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1036,18 +1441,18 @@ fun UnitHeadExecutiveDashboard(
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = IndustrialEmerald)
                 ) {
-                    Icon(imageVector = Icons.Default.AccountTree, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(imageVector = Icons.Default.AccountTree, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("بسته‌های کاری واحد", fontSize = 12.sp)
+                    Text("مشاهده کل WBS واحد", fontSize = 11.sp)
                 }
 
                 OutlinedButton(
                     onClick = { onNavigateToProcurement() },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Icon(imageVector = Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(imageVector = Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("قطعات بحرانی", fontSize = 12.sp)
+                    Text("درخواست و قطعات", fontSize = 11.sp)
                 }
             }
         }

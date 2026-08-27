@@ -1,10 +1,14 @@
 package com.example
 
+import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -14,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
@@ -22,12 +27,13 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.entity.OversightItemEntity
 import com.example.ui.*
-import com.example.ui.components.getNavigationTabsForRole
+import com.example.ui.components.*
 import com.example.ui.theme.MyApplicationTheme
 
 enum class AppTab(val title: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
     DASHBOARD("داشبورد", Icons.Default.Dashboard),
     WBS("ساختار WBS", Icons.Default.AccountTree),
+    SAFETY_PERMITS("پرمیت‌های ایمنی و HSE", Icons.Default.HealthAndSafety),
     MSP_SYNC("همگام‌سازی MSP", Icons.Default.SyncAlt),
     SESSIONS("جلسات و تصمیمات", Icons.Default.Groups),
     PROCUREMENT("تأمین و خرید", Icons.Default.ShoppingCart),
@@ -41,8 +47,21 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Configure Fullscreen Immersive Mode: Hide status bar to prevent overlap with top app elements
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+        insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        insetsController.hide(WindowInsetsCompat.Type.statusBars())
+
         setContent {
-            MyApplicationTheme {
+            val currentThemeMode by viewModel.appThemeMode.collectAsStateWithLifecycle()
+            val currentFontScale by viewModel.appFontScale.collectAsStateWithLifecycle()
+
+            MyApplicationTheme(
+                themeMode = currentThemeMode,
+                fontScale = currentFontScale
+            ) {
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                     val isLoggedIn by viewModel.isLoggedIn.collectAsStateWithLifecycle()
                     val allUsers by viewModel.users.collectAsStateWithLifecycle()
@@ -106,7 +125,11 @@ fun OverhaulCoordinationApp(viewModel: MainViewModel) {
     val sessionNotes by viewModel.sessionNotes.collectAsStateWithLifecycle()
     val procurements by viewModel.procurements.collectAsStateWithLifecycle()
     val auditLogs by viewModel.auditLogs.collectAsStateWithLifecycle()
+    val safetyPermits by viewModel.safetyPermits.collectAsStateWithLifecycle()
+    val electricalLotoPermits by viewModel.electricalLotoPermits.collectAsStateWithLifecycle()
     val uiMessage by viewModel.uiMessage.collectAsStateWithLifecycle()
+
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     // Dialog States
     var selectedItemForDailyUpdate by remember { mutableStateOf<OversightItemEntity?>(null) }
@@ -116,8 +139,25 @@ fun OverhaulCoordinationApp(viewModel: MainViewModel) {
     var activeSessionIdForDecision by remember { mutableStateOf<Long?>(null) }
     var activeSessionIdForNote by remember { mutableStateOf<Long?>(null) }
     var showAddProcurementDialog by remember { mutableStateOf(false) }
+    var showUserSettingsDialog by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
+
+    val roleTabs = remember(currentUser, dashboardKpis) {
+        getNavigationTabsForRole(
+            user = currentUser,
+            kpis = dashboardKpis,
+            pendingSyncCount = dashboardKpis.inProgressCount,
+            blockedTaskCount = dashboardKpis.blockedCount
+        )
+    }
+
+    // Ensure valid tab when switching roles
+    LaunchedEffect(roleTabs) {
+        if (roleTabs.none { it.tab == currentTab }) {
+            currentTab = roleTabs.firstOrNull()?.tab ?: AppTab.DASHBOARD
+        }
+    }
 
     LaunchedEffect(uiMessage) {
         uiMessage?.let { msg ->
@@ -151,67 +191,56 @@ fun OverhaulCoordinationApp(viewModel: MainViewModel) {
             }
         },
         topBar = {
-            AppHeader(
-                currentUser = currentUser,
-                allUsers = allUsers,
-                oversights = oversights,
-                selectedOversightId = selectedOversightId,
-                onSwitchUser = { viewModel.switchUserDirectly(it) },
-                onSelectOversight = { viewModel.selectOversight(it) },
-                onLogout = { viewModel.logout() }
-            )
-        },
-        bottomBar = {
-            val roleTabs = remember(currentUser, dashboardKpis) {
-                getNavigationTabsForRole(
-                    user = currentUser,
-                    kpis = dashboardKpis,
-                    pendingSyncCount = dashboardKpis.inProgressCount,
-                    blockedTaskCount = dashboardKpis.blockedCount
+            if (!isLandscape) {
+                AppHeader(
+                    currentUser = currentUser,
+                    allUsers = allUsers,
+                    oversights = oversights,
+                    selectedOversightId = selectedOversightId,
+                    onSwitchUser = { viewModel.switchUserDirectly(it) },
+                    onSelectOversight = { viewModel.selectOversight(it) },
+                    onLogout = { viewModel.logout() },
+                    onOpenSettings = { showUserSettingsDialog = true }
                 )
             }
-
-            // Ensure valid tab when switching roles
-            LaunchedEffect(roleTabs) {
-                if (roleTabs.none { it.tab == currentTab }) {
-                    currentTab = AppTab.DASHBOARD
-                }
-            }
-
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 6.dp
-            ) {
-                roleTabs.forEach { tabConfig ->
-                    val isSelected = currentTab == tabConfig.tab
-                    NavigationBarItem(
-                        selected = isSelected,
-                        onClick = { currentTab = tabConfig.tab },
-                        icon = {
-                            BadgedBox(
-                                badge = {
-                                    if (tabConfig.badgeCount > 0 && !isSelected) {
-                                        Badge(
-                                            containerColor = MaterialTheme.colorScheme.error
-                                        ) {
-                                            Text("${tabConfig.badgeCount}")
+        },
+        bottomBar = {
+            if (!isLandscape) {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 6.dp
+                ) {
+                    roleTabs.forEach { tabConfig ->
+                        val isSelected = currentTab == tabConfig.tab
+                        NavigationBarItem(
+                            selected = isSelected,
+                            onClick = { currentTab = tabConfig.tab },
+                            icon = {
+                                BadgedBox(
+                                    badge = {
+                                        if (tabConfig.badgeCount > 0 && !isSelected) {
+                                            Badge(
+                                                containerColor = MaterialTheme.colorScheme.error
+                                            ) {
+                                                Text("${tabConfig.badgeCount}")
+                                            }
                                         }
                                     }
+                                ) {
+                                    Icon(imageVector = tabConfig.icon, contentDescription = tabConfig.title)
                                 }
-                            ) {
-                                Icon(imageVector = tabConfig.icon, contentDescription = tabConfig.title)
+                            },
+                            label = {
+                                Text(
+                                    text = tabConfig.title,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
                             }
-                        },
-                        label = {
-                            Text(
-                                text = tabConfig.title,
-                                style = MaterialTheme.typography.labelSmall,
-                                maxLines = 1,
-                                fontSize = 10.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                            )
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }
@@ -291,6 +320,16 @@ fun OverhaulCoordinationApp(viewModel: MainViewModel) {
                     }
                 )
 
+                AppTab.SAFETY_PERMITS -> SafetyPermitsTab(
+                    permits = safetyPermits,
+                    wbsItems = rawItems,
+                    currentUser = currentUser,
+                    onIssuePermit = { viewModel.issueSafetyPermit(it) },
+                    onUpdatePermitStatus = { id, status -> viewModel.updateSafetyPermitStatus(id, status) },
+                    onUpdateLotoStatus = { id, status, taggedBy -> viewModel.updateElectricalLotoStatus(id, status, taggedBy) },
+                    onDeletePermit = { viewModel.deleteSafetyPermit(it) }
+                )
+
                 AppTab.MSP_SYNC -> MspSyncTab(
                     dailyLogs = dailyLogs,
                     exportedMspCsv = exportedMspCsv,
@@ -329,6 +368,23 @@ fun OverhaulCoordinationApp(viewModel: MainViewModel) {
                     auditLogs = auditLogs,
                     currentUser = currentUser,
                     kpis = dashboardKpis
+                )
+            }
+
+            // Landscape Floating Glass Bubbles Overlay
+            if (isLandscape) {
+                LandscapeFloatingGlassControls(
+                    currentTab = currentTab,
+                    onTabSelected = { currentTab = it },
+                    roleTabs = roleTabs,
+                    currentUser = currentUser,
+                    allUsers = allUsers,
+                    oversights = oversights,
+                    selectedOversightId = selectedOversightId,
+                    onSwitchUser = { viewModel.switchUserDirectly(it) },
+                    onSelectOversight = { viewModel.selectOversight(it) },
+                    onLogout = { viewModel.logout() },
+                    onOpenSettings = { showUserSettingsDialog = true }
                 )
             }
         }
@@ -450,6 +506,28 @@ fun OverhaulCoordinationApp(viewModel: MainViewModel) {
                 viewModel.createProcurementRequest(itemId, null, title, itemType, quantity, estimatedCost)
                 showAddProcurementDialog = false
             }
+        )
+    }
+
+    // 7. User Settings & Appearance Modal
+    if (showUserSettingsDialog) {
+        val currentThemeMode by viewModel.appThemeMode.collectAsStateWithLifecycle()
+        val currentFontScale by viewModel.appFontScale.collectAsStateWithLifecycle()
+
+        UserSettingsDialog(
+            user = currentUser,
+            currentThemeMode = currentThemeMode,
+            currentFontScale = currentFontScale,
+            onSetThemeMode = { mode ->
+                viewModel.setThemeMode(mode)
+            },
+            onSetFontScale = { scale ->
+                viewModel.setFontScale(scale)
+            },
+            onChangePassword = { oldPass, newPass, confirmPass ->
+                viewModel.changePassword(oldPass, newPass, confirmPass)
+            },
+            onDismiss = { showUserSettingsDialog = false }
         )
     }
 }

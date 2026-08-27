@@ -72,6 +72,57 @@ fun getEmojiForTag(tag: TaskLogisticsTag): String {
  * WBS Hierarchy & Nested Task Management View
  * ساختار مدیریت سلسله‌مراتبی شکست کار (WBS) و پایش تسک‌های تو در تو در سامانه اورهال فولاد غدیر نی‌ریز
  */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AppTooltipIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tooltip: String,
+    isSelected: Boolean = false,
+    selectedContainerColor: Color = MaterialTheme.colorScheme.primaryContainer,
+    selectedContentColor: Color = MaterialTheme.colorScheme.onPrimaryContainer,
+    unselectedContentColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    testTag: String = "",
+    onClick: () -> Unit
+) {
+    val tooltipState = rememberTooltipState()
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = {
+            PlainTooltip(
+                shape = RoundedCornerShape(8.dp),
+                containerColor = IndustrialNavy,
+                contentColor = Color.White
+            ) {
+                Text(
+                    text = tooltip,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                )
+            }
+        },
+        state = tooltipState
+    ) {
+        IconButton(
+            onClick = onClick,
+            modifier = Modifier
+                .size(36.dp)
+                .background(
+                    if (isSelected) selectedContainerColor else Color.Transparent,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                .then(if (testTag.isNotEmpty()) Modifier.testTag(testTag) else Modifier)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = tooltip,
+                tint = if (isSelected) selectedContentColor else unselectedContentColor,
+                modifier = Modifier.size(19.dp)
+            )
+        }
+    }
+}
+
 @Composable
 fun WbsHierarchyManagementView(
     items: List<OversightItemEntity>,
@@ -110,12 +161,17 @@ fun WbsHierarchyManagementView(
     var itemToDelete by remember { mutableStateOf<OversightItemEntity?>(null) }
     var selectedSupervisorId by remember { mutableStateOf<Long?>(null) }
 
+    // Dropdown state controls
+    var showStatusDropdown by remember { mutableStateOf(false) }
+    var showSupervisorDropdown by remember { mutableStateOf(false) }
+    var showUnitDropdown by remember { mutableStateOf(false) }
+
     val relevantSupervisors = remember(allUsers, selectedUnit, currentUser) {
         val targetUnit = selectedUnit ?: currentUser?.unit
-        if (targetUnit != null) {
+        if (targetUnit != null && currentUser?.role == "unit_head") {
             allUsers.filter { it.unit == targetUnit || (it.role == "supervisor" && it.unit == targetUnit) }
         } else {
-            allUsers.filter { it.role == "supervisor" }
+            allUsers.filter { it.role == "supervisor" || it.role == "unit_head" }
         }
     }
 
@@ -124,7 +180,7 @@ fun WbsHierarchyManagementView(
             .fillMaxSize()
             .padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
-        // 1. Search Bar & View Mode Selector Header
+        // 1. Search Bar & View Mode Selector Header with Long-Press Tooltips
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -133,12 +189,12 @@ fun WbsHierarchyManagementView(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = onSearchChange,
-                placeholder = { Text("جستجو در WBS، تجهیز یا فعالیت...", fontSize = 11.sp) },
+                placeholder = { Text("جستجو در ساختار شکست WBS، تجهیز یا فعالیت...", fontSize = 12.sp) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { onSearchChange("") }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear", modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Clear, contentDescription = "پاک کردن", modifier = Modifier.size(16.dp))
                         }
                     }
                 },
@@ -150,288 +206,316 @@ fun WbsHierarchyManagementView(
                     .testTag("wbs_search_input")
             )
 
-            // View Mode Selector Segmented Buttons (5 modes: Tree, Matrix, Linear, Quick Review, Logistics)
+            // View Mode Selector Segmented Buttons with Persian Tooltips on long-press
             Surface(
                 shape = RoundedCornerShape(10.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
             ) {
                 Row(modifier = Modifier.padding(2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    IconButton(
-                        onClick = { onSetViewMode(WbsViewMode.TREE) },
-                        modifier = Modifier
-                            .size(34.dp)
-                            .background(
-                                if (currentViewMode == WbsViewMode.TREE) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                                shape = RoundedCornerShape(6.dp)
-                            )
-                            .testTag("view_mode_tree_btn")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AccountTree,
-                            contentDescription = "درخت تودرتو",
-                            tint = if (currentViewMode == WbsViewMode.TREE) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                    AppTooltipIconButton(
+                        icon = Icons.Default.AccountTree,
+                        tooltip = "نمای درختی سلسله‌مراتبی (WBS Tree)",
+                        isSelected = currentViewMode == WbsViewMode.TREE,
+                        testTag = "view_mode_tree_btn",
+                        onClick = { onSetViewMode(WbsViewMode.TREE) }
+                    )
 
-                    IconButton(
-                        onClick = { onSetViewMode(WbsViewMode.QUICK_REVIEW) },
-                        modifier = Modifier
-                            .size(34.dp)
-                            .background(
-                                if (currentViewMode == WbsViewMode.QUICK_REVIEW) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                                shape = RoundedCornerShape(6.dp)
-                            )
-                            .testTag("view_mode_quick_review_btn")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FlashOn,
-                            contentDescription = "مرور سریع آکاردئونی",
-                            tint = if (currentViewMode == WbsViewMode.QUICK_REVIEW) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                    AppTooltipIconButton(
+                        icon = Icons.Default.FlashOn,
+                        tooltip = "مرور سریع آکاردئونی و ثبت گزارش درجا",
+                        isSelected = currentViewMode == WbsViewMode.QUICK_REVIEW,
+                        testTag = "view_mode_quick_review_btn",
+                        onClick = { onSetViewMode(WbsViewMode.QUICK_REVIEW) }
+                    )
 
-                    IconButton(
-                        onClick = { onSetViewMode(WbsViewMode.LOGISTICS_SCHEDULE) },
-                        modifier = Modifier
-                            .size(34.dp)
-                            .background(
-                                if (currentViewMode == WbsViewMode.LOGISTICS_SCHEDULE) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                                shape = RoundedCornerShape(6.dp)
-                            )
-                            .testTag("view_mode_logistics_btn")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Engineering,
-                            contentDescription = "لجستیک و جرثقیل",
-                            tint = if (currentViewMode == WbsViewMode.LOGISTICS_SCHEDULE) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                    AppTooltipIconButton(
+                        icon = Icons.Default.Engineering,
+                        tooltip = "پایش لجستیک و ادوات (جرثقیل، داربست، فلاشینگ، LOTO)",
+                        isSelected = currentViewMode == WbsViewMode.LOGISTICS_SCHEDULE,
+                        testTag = "view_mode_logistics_btn",
+                        onClick = { onSetViewMode(WbsViewMode.LOGISTICS_SCHEDULE) }
+                    )
 
-                    IconButton(
-                        onClick = { onSetViewMode(WbsViewMode.INDUSTRIAL_MATRIX) },
-                        modifier = Modifier
-                            .size(34.dp)
-                            .background(
-                                if (currentViewMode == WbsViewMode.INDUSTRIAL_MATRIX) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                                shape = RoundedCornerShape(6.dp)
-                            )
-                            .testTag("view_mode_matrix_btn")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.GridView,
-                            contentDescription = "ماتریس ناحیه‌ای",
-                            tint = if (currentViewMode == WbsViewMode.INDUSTRIAL_MATRIX) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                    AppTooltipIconButton(
+                        icon = Icons.Default.GridView,
+                        tooltip = "ماتریس ناحیه‌ای و زون‌های کارخانه",
+                        isSelected = currentViewMode == WbsViewMode.INDUSTRIAL_MATRIX,
+                        testTag = "view_mode_matrix_btn",
+                        onClick = { onSetViewMode(WbsViewMode.INDUSTRIAL_MATRIX) }
+                    )
 
-                    IconButton(
-                        onClick = { onSetViewMode(WbsViewMode.LIST_OUTLINE) },
-                        modifier = Modifier
-                            .size(34.dp)
-                            .background(
-                                if (currentViewMode == WbsViewMode.LIST_OUTLINE) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                                shape = RoundedCornerShape(6.dp)
-                            )
-                            .testTag("view_mode_list_btn")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FormatListBulleted,
-                            contentDescription = "فهرست خطی",
-                            tint = if (currentViewMode == WbsViewMode.LIST_OUTLINE) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                    AppTooltipIconButton(
+                        icon = Icons.Default.FormatListBulleted,
+                        tooltip = "فهرست خطی با کدهای WBS",
+                        isSelected = currentViewMode == WbsViewMode.LIST_OUTLINE,
+                        testTag = "view_mode_list_btn",
+                        onClick = { onSetViewMode(WbsViewMode.LIST_OUTLINE) }
+                    )
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        // 2. Filter Chips (Supervisor Filters & Quick Status)
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
-            modifier = Modifier.fillMaxWidth()
+        // 2. Compact Dropdown Filters Row (Clean, uncluttered, larger font)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            item {
-                FilterChip(
-                    selected = supervisorFilter == SupervisorFilter.ALL,
-                    onClick = { onSupervisorFilterSelect(SupervisorFilter.ALL) },
-                    label = { Text("همه تسک‌ها (${items.size})", fontSize = 11.sp) },
-                    modifier = Modifier.height(32.dp)
-                )
-            }
-            item {
-                FilterChip(
-                    selected = supervisorFilter == SupervisorFilter.TODAY_TASKS,
-                    onClick = { onSupervisorFilterSelect(SupervisorFilter.TODAY_TASKS) },
-                    label = { Text("امروز", fontSize = 11.sp) },
-                    leadingIcon = { Icon(Icons.Default.Today, contentDescription = null, modifier = Modifier.size(13.dp)) },
-                    modifier = Modifier.height(32.dp)
-                )
-            }
-            item {
-                FilterChip(
-                    selected = supervisorFilter == SupervisorFilter.INCOMPLETE_DUE,
-                    onClick = { onSupervisorFilterSelect(SupervisorFilter.INCOMPLETE_DUE) },
-                    label = { Text("ناتمام تا امروز", fontSize = 11.sp) },
-                    leadingIcon = { Icon(Icons.Default.PendingActions, contentDescription = null, modifier = Modifier.size(13.dp)) },
-                    modifier = Modifier.height(32.dp)
-                )
-            }
-            item {
-                FilterChip(
-                    selected = supervisorFilter == SupervisorFilter.BLOCKED,
-                    onClick = { onSupervisorFilterSelect(SupervisorFilter.BLOCKED) },
-                    label = { Text("دارای مانع", fontSize = 11.sp) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.errorContainer,
-                        selectedLabelColor = MaterialTheme.colorScheme.onErrorContainer
-                    ),
-                    modifier = Modifier.height(32.dp)
-                )
-            }
-            item {
-                FilterChip(
-                    selected = supervisorFilter == SupervisorFilter.IN_PROGRESS,
-                    onClick = { onSupervisorFilterSelect(SupervisorFilter.IN_PROGRESS) },
-                    label = { Text("در حال اجرا", fontSize = 11.sp) },
-                    modifier = Modifier.height(32.dp)
-                )
-            }
-            item {
-                FilterChip(
-                    selected = supervisorFilter == SupervisorFilter.COMPLETED,
-                    onClick = { onSupervisorFilterSelect(SupervisorFilter.COMPLETED) },
-                    label = { Text("تکمیل شده", fontSize = 11.sp) },
-                    modifier = Modifier.height(32.dp)
-                )
-            }
-        }
+            // Dropdown 1: Task Status / Schedule Filter
+            Box(modifier = Modifier.weight(1.2f)) {
+                val currentStatusTitle = when (supervisorFilter) {
+                    SupervisorFilter.ALL -> "همه تسک‌ها (${items.size})"
+                    SupervisorFilter.TODAY_TASKS -> "کارهای شیفت امروز"
+                    SupervisorFilter.INCOMPLETE_DUE -> "ناتمام تا امروز"
+                    SupervisorFilter.BLOCKED -> "دارای مانع (Blocked)"
+                    SupervisorFilter.IN_PROGRESS -> "در حال اجرا"
+                    SupervisorFilter.COMPLETED -> "تکمیل شده"
+                }
 
-        // 2.1 Supervisor selector chips for Unit Heads / Planners / Managers
-        if (relevantSupervisors.isNotEmpty() && (currentUser?.role == "unit_head" || currentUser?.role == "admin" || currentUser?.role == "planner")) {
-            Spacer(modifier = Modifier.height(4.dp))
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                item {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (selectedSupervisorId == null) IndustrialNavy else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.clickable { selectedSupervisorId = null }
+                val currentStatusIcon = when (supervisorFilter) {
+                    SupervisorFilter.ALL -> Icons.Default.ListAlt
+                    SupervisorFilter.TODAY_TASKS -> Icons.Default.Today
+                    SupervisorFilter.INCOMPLETE_DUE -> Icons.Default.PendingActions
+                    SupervisorFilter.BLOCKED -> Icons.Default.Block
+                    SupervisorFilter.IN_PROGRESS -> Icons.Default.PlayCircle
+                    SupervisorFilter.COMPLETED -> Icons.Default.CheckCircle
+                }
+
+                Surface(
+                    onClick = { showStatusDropdown = true },
+                    shape = RoundedCornerShape(10.dp),
+                    color = when (supervisorFilter) {
+                        SupervisorFilter.BLOCKED -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f)
+                        SupervisorFilter.TODAY_TASKS -> IndustrialSteelBlue.copy(alpha = 0.15f)
+                        SupervisorFilter.IN_PROGRESS -> IndustrialAmber.copy(alpha = 0.15f)
+                        SupervisorFilter.COMPLETED -> IndustrialEmerald.copy(alpha = 0.15f)
+                        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                    },
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
+                    modifier = Modifier.fillMaxWidth().height(38.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(
-                            text = "همه سرپرستان",
-                            fontSize = 10.sp,
-                            fontWeight = if (selectedSupervisorId == null) FontWeight.Bold else FontWeight.Normal,
-                            color = if (selectedSupervisorId == null) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(
+                                imageVector = currentStatusIcon,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = when (supervisorFilter) {
+                                    SupervisorFilter.BLOCKED -> MaterialTheme.colorScheme.error
+                                    SupervisorFilter.TODAY_TASKS -> IndustrialSteelBlue
+                                    SupervisorFilter.IN_PROGRESS -> IndustrialAmber
+                                    SupervisorFilter.COMPLETED -> IndustrialEmerald
+                                    else -> MaterialTheme.colorScheme.primary
+                                }
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text(
+                                text = currentStatusTitle,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
+                    }
+                }
+
+                DropdownMenu(
+                    expanded = showStatusDropdown,
+                    onDismissRequest = { showStatusDropdown = false }
+                ) {
+                    val statusOptions = listOf(
+                        Triple(SupervisorFilter.ALL, "همه تسک‌ها (${items.size})", Icons.Default.ListAlt),
+                        Triple(SupervisorFilter.TODAY_TASKS, "کارهای شیفت امروز", Icons.Default.Today),
+                        Triple(SupervisorFilter.INCOMPLETE_DUE, "ناتمام تا امروز", Icons.Default.PendingActions),
+                        Triple(SupervisorFilter.BLOCKED, "دارای مانع اجرایی", Icons.Default.Block),
+                        Triple(SupervisorFilter.IN_PROGRESS, "در حال اجرا", Icons.Default.PlayCircle),
+                        Triple(SupervisorFilter.COMPLETED, "تکمیل شده", Icons.Default.CheckCircle)
+                    )
+
+                    statusOptions.forEach { (filter, label, icon) ->
+                        val isSelected = supervisorFilter == filter
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = label,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = null,
+                                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            },
+                            trailingIcon = {
+                                if (isSelected) {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                }
+                            },
+                            onClick = {
+                                onSupervisorFilterSelect(filter)
+                                showStatusDropdown = false
+                            }
                         )
                     }
                 }
-                items(relevantSupervisors) { sup ->
-                    val isSelected = selectedSupervisorId == sup.id
+            }
+
+            // Dropdown 2: Supervisor Selector Filter
+            if (relevantSupervisors.isNotEmpty()) {
+                Box(modifier = Modifier.weight(1f)) {
+                    val selectedSupName = remember(selectedSupervisorId, relevantSupervisors) {
+                        relevantSupervisors.firstOrNull { it.id == selectedSupervisorId }?.name ?: "همه سرپرستان"
+                    }
+
                     Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (isSelected) IndustrialSteelBlue else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.clickable { selectedSupervisorId = if (isSelected) null else sup.id }
+                        onClick = { showSupervisorDropdown = true },
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (selectedSupervisorId != null) IndustrialSteelBlue.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
+                        modifier = Modifier.fillMaxWidth().height(38.dp)
                     ) {
                         Row(
+                            modifier = Modifier.padding(horizontal = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(14.dp)
-                                    .background(if (isSelected) Color.White else IndustrialSteelBlue, CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = if (selectedSupervisorId != null) IndustrialSteelBlue else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    sup.name.take(1),
-                                    fontSize = 8.sp,
-                                    color = if (isSelected) IndustrialSteelBlue else Color.White,
-                                    fontWeight = FontWeight.Bold
+                                    text = selectedSupName,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (selectedSupervisorId != null) FontWeight.Bold else FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = sup.name,
-                                fontSize = 10.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
+                        }
+                    }
+
+                    DropdownMenu(
+                        expanded = showSupervisorDropdown,
+                        onDismissRequest = { showSupervisorDropdown = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = "همه سرپرستان",
+                                    fontSize = 12.sp,
+                                    fontWeight = if (selectedSupervisorId == null) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(Icons.Default.Groups, contentDescription = null, modifier = Modifier.size(18.dp))
+                            },
+                            trailingIcon = {
+                                if (selectedSupervisorId == null) {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                }
+                            },
+                            onClick = {
+                                selectedSupervisorId = null
+                                showSupervisorDropdown = false
+                            }
+                        )
+                        Divider()
+                        relevantSupervisors.forEach { sup ->
+                            val isSelected = selectedSupervisorId == sup.id
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(
+                                            text = sup.name,
+                                            fontSize = 12.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                        Text(
+                                            text = "واحد: ${sup.unit ?: "عمومی"}",
+                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
+                                leadingIcon = {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = if (isSelected) IndustrialSteelBlue else Color.LightGray,
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(
+                                                text = sup.name.take(1),
+                                                fontSize = 10.sp,
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                },
+                                trailingIcon = {
+                                    if (isSelected) {
+                                        Icon(Icons.Default.Check, contentDescription = null, tint = IndustrialSteelBlue, modifier = Modifier.size(16.dp))
+                                    }
+                                },
+                                onClick = {
+                                    selectedSupervisorId = sup.id
+                                    showSupervisorDropdown = false
+                                }
                             )
                         }
                     }
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.height(6.dp))
-
-        // 3. Hierarchy Management Action Bar (Expand / Collapse / Add Root Task)
-        if (currentViewMode == WbsViewMode.TREE) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                        modifier = Modifier.clickable { onExpandAllTreeNodes() }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.UnfoldMore, contentDescription = null, modifier = Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary)
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text("گسترش همه", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.clickable { onCollapseAllTreeNodes() }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.UnfoldLess, contentDescription = null, modifier = Modifier.size(13.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text("بستن همه", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
+            // Tree Mode Actions: Expand All / Collapse All (With Tooltips)
+            if (currentViewMode == WbsViewMode.TREE) {
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    AppTooltipIconButton(
+                        icon = Icons.Default.UnfoldMore,
+                        tooltip = "گسترش همه گره‌های درختی",
+                        onClick = onExpandAllTreeNodes
+                    )
+                    AppTooltipIconButton(
+                        icon = Icons.Default.UnfoldLess,
+                        tooltip = "بستن همه زیرشاخه‌ها",
+                        onClick = onCollapseAllTreeNodes
+                    )
                 }
 
                 if (currentUser?.role == "admin" || currentUser?.role == "planner") {
-                    Button(
-                        onClick = onAddNewRootItem,
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = IndustrialNavy),
-                        modifier = Modifier.height(30.dp)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(13.dp))
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text("فعالیت ریشه جدید", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
+                    AppTooltipIconButton(
+                        icon = Icons.Default.Add,
+                        tooltip = "افزودن فعالیت ریشه جدید به WBS",
+                        selectedContainerColor = IndustrialNavy,
+                        selectedContentColor = Color.White,
+                        isSelected = true,
+                        onClick = onAddNewRootItem
+                    )
                 }
             }
-            Spacer(modifier = Modifier.height(6.dp))
         }
+
+        Spacer(modifier = Modifier.height(6.dp))
 
         // 4. Main Body Content Based on Active View Mode
         val displayItems = remember(items, selectedSupervisorId, allAssignments) {
@@ -1572,14 +1656,13 @@ fun WbsLogisticsScheduleView(
     allUsers: List<UserEntity>,
     onItemClickForDailyUpdate: (OversightItemEntity) -> Unit
 ) {
-    var selectedDayTab by remember { mutableStateOf("today") } // "today" or "tomorrow"
     var selectedLogisticsFilter by remember { mutableStateOf("all") } // "all", "crane", "scaffolding", "flushing", "loto"
 
     val userMap = remember(allUsers) { allUsers.associateBy { it.id } }
     val assignmentGroup = remember(allAssignments) { allAssignments.groupBy { it.itemId } }
 
     // Tagged tasks with special logistics requirements
-    val logisticsTasks = remember(items, selectedDayTab, selectedLogisticsFilter) {
+    val logisticsTasks = remember(items, selectedLogisticsFilter) {
         items.mapNotNull { item ->
             val tags = getLogisticsTagsForItem(item)
             if (tags.isNotEmpty()) {
@@ -1623,7 +1706,7 @@ fun WbsLogisticsScheduleView(
                         color = IndustrialAmber.copy(alpha = 0.25f)
                     ) {
                         Text(
-                            text = "${logisticsTasks.size} فعالیت لجستیکی",
+                            text = "${logisticsTasks.size} فعالیت لجستیکی فعال",
                             color = IndustrialAmber,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
@@ -1648,70 +1731,6 @@ fun WbsLogisticsScheduleView(
         }
 
         Spacer(modifier = Modifier.height(6.dp))
-
-        // Shift selector: Today vs. Tomorrow (برای استقرار روز قبل)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = if (selectedDayTab == "today") IndustrialSteelBlue else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { selectedDayTab = "today" }
-            ) {
-                Row(
-                    modifier = Modifier.padding(vertical = 6.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.Today,
-                        contentDescription = null,
-                        tint = if (selectedDayTab == "today") Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "ادوات شیفت امروز",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
-                        color = if (selectedDayTab == "today") Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = if (selectedDayTab == "tomorrow") IndustrialSteelBlue else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { selectedDayTab = "tomorrow" }
-            ) {
-                Row(
-                    modifier = Modifier.padding(vertical = 6.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.Event,
-                        contentDescription = null,
-                        tint = if (selectedDayTab == "tomorrow") Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "برنامه‌ریزی استقرار فردا",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
-                        color = if (selectedDayTab == "tomorrow") Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
 
         // Filter chips: All, Crane, Scaffolding, Flushing, LOTO
         LazyRow(

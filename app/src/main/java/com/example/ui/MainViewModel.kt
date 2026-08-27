@@ -11,6 +11,8 @@ import com.example.data.importer.MsProjectImporter
 import com.example.data.importer.ParsedImportPreview
 import com.example.data.service.OverhaulService
 import com.example.data.service.ServiceResult
+import com.example.ui.theme.AppFontScale
+import com.example.ui.theme.AppThemeMode
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -205,6 +207,71 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isLoggedIn = MutableStateFlow(false)
     val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
 
+    // 1.1 تنظیمات عمومی کاربر (پوسته، اندازه فونت و ذخیره در SharedPreferences)
+    private val _themeMode = MutableStateFlow(
+        try {
+            AppThemeMode.valueOf(prefs.getString("app_theme_mode", AppThemeMode.SYSTEM.name) ?: AppThemeMode.SYSTEM.name)
+        } catch (e: Exception) {
+            AppThemeMode.SYSTEM
+        }
+    )
+    val themeMode: StateFlow<AppThemeMode> = _themeMode.asStateFlow()
+    val appThemeMode: StateFlow<AppThemeMode> = _themeMode.asStateFlow()
+
+    private val _fontScale = MutableStateFlow(
+        prefs.getFloat("app_font_scale", 1.0f)
+    )
+    val fontScale: StateFlow<Float> = _fontScale.asStateFlow()
+    val appFontScale: StateFlow<Float> = _fontScale.asStateFlow()
+
+    fun setThemeMode(mode: AppThemeMode) {
+        _themeMode.value = mode
+        prefs.edit().putString("app_theme_mode", mode.name).apply()
+    }
+
+    fun setFontScale(scale: Float) {
+        _fontScale.value = scale
+        prefs.edit().putFloat("app_font_scale", scale).apply()
+    }
+
+    fun changePassword(oldPass: String, newPass: String, confirmPass: String) {
+        val uid = _currentUser.value?.id
+        if (uid != null) {
+            changePassword(uid, oldPass, newPass, confirmPass)
+        } else {
+            _uiMessage.value = UiMessage("کاربر وارد نشده است.", isError = true)
+        }
+    }
+
+    fun changePassword(userId: Long, oldPass: String, newPass: String, confirmPass: String) {
+        viewModelScope.launch {
+            if (newPass.length < 3) {
+                _uiMessage.value = UiMessage("کلمه عبور جدید باید حداقل ۳ کاراکتر باشد.", isError = true)
+                return@launch
+            }
+            if (newPass != confirmPass) {
+                _uiMessage.value = UiMessage("کلمه عبور جدید با تکرار آن همخوانی ندارد.", isError = true)
+                return@launch
+            }
+            val user = dao.getUserById(userId)
+            if (user == null) {
+                _uiMessage.value = UiMessage("کاربر یافت نشد.", isError = true)
+                return@launch
+            }
+            if (user.password != oldPass && oldPass.isNotBlank()) {
+                _uiMessage.value = UiMessage("کلمه عبور فعلی نادرست است.", isError = true)
+                return@launch
+            }
+            try {
+                dao.updatePassword(userId, newPass)
+                _currentUser.value = user.copy(password = newPass)
+                _uiMessage.value = UiMessage("کلمه عبور با موفقیت تغییر یافت.")
+            } catch (e: Exception) {
+                _uiMessage.value = UiMessage("خطا در تغییر کلمه عبور: ${e.localizedMessage}", isError = true)
+            }
+        }
+    }
+
     // 2. برنامه‌های اورهال
     val oversights = dao.getAllOversights().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     private val _selectedOversightId = MutableStateFlow<Long?>(null)
@@ -238,13 +305,46 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /**
+     * بررسی مجوز دسترسی واحد:
+     * روسای بخش‌های اجرایی و سرپرستان فقط تسک‌های کلی و تسک‌های واحد خود را می‌بینند
+     * و مشاهده تسک‌های سایر واحدهای اجرایی برای آن‌ها مجاز نیست.
+     * مدیران، برنامه‌ریزان و واحد ایمنی و بهداشت HSE برای نظارت کامل و صدور پرمیت‌ها به همه تسک‌ها دسترسی دارند.
+     */
+    fun isTaskAllowedForUser(item: OversightItemEntity, user: UserEntity?): Boolean {
+        if (user == null) return true
+        if (user.role == "admin" || user.role == "planner" || user.role == "hse") return true
+        if (user.unit?.contains("ایمنی") == true || user.unit?.contains("HSE", ignoreCase = true) == true) return true
+
+        val cleanItemUnit = item.executiveUnit.trim()
+        if (cleanItemUnit == "کلی" || cleanItemUnit == "عمومی" || cleanItemUnit == "مدیریت" || cleanItemUnit == "اورهال" || cleanItemUnit.isBlank()) {
+            return true
+        }
+
+        val userUnit = user.unit?.trim() ?: return true
+
+        fun normalizeUnit(u: String): String = when {
+            u.contains("ابزار") || u.contains("اتوماسیون") -> "automation"
+            u.contains("مکانیک") -> "mechanic"
+            u.contains("برق") -> "electric"
+            u.contains("نسوز") -> "refractory"
+            u.contains("سیالات") || u.contains("انرژی") || u.contains("WTP") || u.contains("آب") -> "fluids"
+            u.contains("بازرسی") || u.contains("NDT") -> "inspection"
+            else -> u
+        }
+
+        return normalizeUnit(cleanItemUnit) == normalizeUnit(userUnit)
+    }
+
     // درخت سلسله‌مراتبی ساختار شکست کار (Hierarchical WBS Tree with Nested Task Aggregation)
     val wbsTree: StateFlow<List<WbsTreeNode>> = combine(
         rawOversightItems,
         allPrerequisites,
         allAssignments,
-        users
-    ) { items, prereqs, assignments, userList ->
+        users,
+        _currentUser
+    ) { allItems, prereqs, assignments, userList, user ->
+        val items = allItems.filter { isTaskAllowedForUser(it, user) }
         if (items.isEmpty()) return@combine emptyList<WbsTreeNode>()
 
         val itemMap = items.associateBy { it.id }
@@ -342,6 +442,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } else null
 
         items.filter { item ->
+            // تفکیک دسترسی واحد: روسای واحدهای اجرایی فقط تسک‌های کلی و تسک‌های واحد خود را می‌بینند
+            val matchesRoleAccess = isTaskAllowedForUser(item, user)
+            if (!matchesRoleAccess) return@filter false
+
             // فیلتر جستجو
             val matchesQuery = params.query.isBlank() ||
                     item.title.contains(params.query, ignoreCase = true) ||
@@ -352,14 +456,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             // فیلتر واحد اجرایی
             val matchesUnit = when {
-                user?.role == "supervisor" && user.unit != null -> item.executiveUnit == user.unit || userAssignedItemIds.contains(item.id)
-                user?.role == "unit_head" && user.unit != null -> item.executiveUnit == user.unit
-                params.unit != null -> item.executiveUnit == params.unit
+                params.unit != null && params.unit != "all" -> item.executiveUnit == params.unit || item.executiveUnit.contains(params.unit)
                 else -> true
             }
 
             // فیلتر وضعیت
-            val matchesStatus = params.status == null || item.status == params.status
+            val matchesStatus = params.status == null || params.status == "all" || item.status == params.status
 
             // فیلتر ویژه سرپرست و ناظر (کارهای تا امروز، کارهای انجام نشده، و ...)
             val matchesSupervisorMode = when (params.supervisorFilter) {
@@ -735,6 +837,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // 9. سوابق ممیزی (Audit Logs)
     val auditLogs = dao.getRecentAuditLogs()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // 9.1 پرمیت‌های ایمنی و ایزولاسیون برقی LOTO (Safety Permits & LOTO)
+    val safetyPermits = _selectedOversightId
+        .flatMapLatest { id ->
+            if (id != null) dao.getSafetyPermitsForOversight(id) else flowOf(emptyList())
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val electricalLotoPermits = dao.getElectricalLotoPermits()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // 10. خروجی و واردات MS Project
@@ -1218,6 +1330,62 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _importPreview.value = null
     }
 
+    // --- عملیات پرمیت‌های ایمنی HSE و ایزولاسیون LOTO ---
+    fun issueSafetyPermit(permit: SafetyPermitEntity) {
+        viewModelScope.launch {
+            dao.insertSafetyPermit(permit)
+            _uiMessage.value = UiMessage("پرمیت ایمنی شماره ${permit.permitNumber} با موفقیت صادر گردید.")
+
+            val user = _currentUser.value
+            dao.insertAuditLog(
+                AuditLogEntity(
+                    entityType = "SAFETY_PERMIT",
+                    entityId = permit.itemId,
+                    action = "PERMIT_ISSUED",
+                    performedByUserId = user?.id ?: 0L,
+                    performedByUserName = user?.name ?: "سرپرست ایمنی",
+                    performedByUserRole = user?.role ?: "hse",
+                    beforeStateJson = "",
+                    afterStateJson = "شماره پرمیت: ${permit.permitNumber} | نوع: ${permit.permitType} | واحد: ${permit.executiveUnit}",
+                    remarks = "صدور پرمیت کارگاهی توسط واحد ایمنی و بهداشت (HSE)",
+                    timestamp = "1404/10/14"
+                )
+            )
+        }
+    }
+
+    fun updateSafetyPermitStatus(permitId: Long, status: String) {
+        viewModelScope.launch {
+            dao.updateSafetyPermitStatus(permitId, status)
+            val text = when (status) {
+                "issued" -> "مجوز پرمیت تایید و صادر شد."
+                "suspended" -> "پرمیت به علت عدم رعایت الزامات ایمنی متوقف گردید."
+                "closed" -> "پرمیت با اتمام کار با موفقیت بسته شد."
+                else -> "وضعیت پرمیت به روز شد."
+            }
+            _uiMessage.value = UiMessage(text)
+        }
+    }
+
+    fun updateElectricalLotoStatus(permitId: Long, status: String, taggedBy: String) {
+        viewModelScope.launch {
+            dao.updateElectricalLotoStatus(permitId, status, taggedBy)
+            val msg = if (status == "isolated_and_tagged") {
+                "کارت قرمز و قفل LOTO توسط واحد برق تایید و نصب شد."
+            } else {
+                "وضعیت ایزولاسیون برقی به روز گردید."
+            }
+            _uiMessage.value = UiMessage(msg)
+        }
+    }
+
+    fun deleteSafetyPermit(id: Long) {
+        viewModelScope.launch {
+            dao.deleteSafetyPermitById(id)
+            _uiMessage.value = UiMessage("پرمیت ایمنی حذف گردید.")
+        }
+    }
+
     private fun <T> handleServiceResult(result: ServiceResult<T>) {
         when (result) {
             is ServiceResult.Success -> {
@@ -1238,6 +1406,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         "planner" -> "برنامه‌ریز اجرایی"
         "supervisor" -> "ناظر و سرپرست اجرایی"
         "unit_head" -> "مدیر / رئیس واحد اجرایی"
+        "hse" -> "سرپرست ایمنی و بهداشت (HSE)"
         else -> role
     }
 

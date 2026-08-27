@@ -191,6 +191,18 @@ object GhadirNeyrizDataSeeder {
                 role = "unit_head",
                 unit = "بازرسی فنی",
                 siteId = "GHADIR_NEYRIZ"
+            ),
+
+            // واحد ایمنی، بهداشت و محیط زیست (HSE)
+            UserEntity(
+                id = 18,
+                username = "rezaei_hse",
+                password = "123",
+                name = "مهندس رضایی (سرپرست ایمنی و بهداشت HSE)",
+                email = "rezaei.hse@ghadirsteel.ir",
+                role = "hse",
+                unit = "ایمنی و بهداشت (HSE)",
+                siteId = "GHADIR_NEYRIZ"
             )
         )
         dao.insertUsers(users)
@@ -505,6 +517,136 @@ object GhadirNeyrizDataSeeder {
             )
         )
         procurementItems.forEach { dao.insertProcurement(it) }
+
+        // 9. پرمیت‌های ایمنی کارگاهی و مجوزهای کار گرم، فضای بسته و LOTO برق
+        val samplePermits = listOf(
+            SafetyPermitEntity(
+                id = 1,
+                itemId = 17, // دمونتاژ و تعویض شارژ هاپر کوره
+                oversightId = 1,
+                permitNumber = "HSE-1404-0101",
+                permitType = "کار گرم و کار در ارتفاع (Hot Work & Height)",
+                status = "issued",
+                executiveUnit = "مکانیک",
+                location = "Core Area - بالای کوره احیا",
+                equipmentName = "Furnace Charge Hopper",
+                issueDate = "1404/10/14",
+                validHours = 12,
+                issuedByUserId = 18,
+                issuedByUserName = "مهندس رضایی (HSE)",
+                requiresElectricalLoto = true,
+                electricalLotoStatus = "isolated_and_tagged",
+                electricalTaggedBy = "مهندس البرزی (ناظر برق)",
+                requiresGasTest = true,
+                gasTestResult = "O2: 20.9% | CO: 0 ppm | LEL: 0%",
+                requiresScaffoldingTag = true,
+                fireWatchRequired = true,
+                safetyPrecautions = "استقرار کپسول پودر و گاز ۶ کیلویی، نصب توری ایمنی و مهاربند کامل هارنس ۵ نقطه",
+                ppeRequirements = "کلاه ایمنی، کفش پنجه فولادی، هارنس دوتایی ضدسقوط، شیلد جوشکاری و ماسک FFP3",
+                createdAt = "1404/10/14 07:30"
+            ),
+            SafetyPermitEntity(
+                id = 2,
+                itemId = 259, // اورهال مکانیکال کمپرسور گاز پروسس
+                oversightId = 1,
+                permitNumber = "HSE-1404-0102",
+                permitType = "ایزولاسیون مکانیکی و الکتریکی (LOTO & Lockout)",
+                status = "issued",
+                executiveUnit = "مکانیک",
+                location = "Core Area - سالن کمپرسورها",
+                equipmentName = "Process Gas Compressor 6.6KV",
+                issueDate = "1404/10/14",
+                validHours = 24,
+                issuedByUserId = 18,
+                issuedByUserName = "مهندس رضایی (HSE)",
+                requiresElectricalLoto = true,
+                electricalLotoStatus = "isolated_and_tagged",
+                electricalTaggedBy = "مهندس یادگار (مدیر واحد برق)",
+                requiresGasTest = true,
+                gasTestResult = "O2: 20.8% | H2S: 0 ppm | LEL: 0%",
+                requiresScaffoldingTag = false,
+                fireWatchRequired = false,
+                safetyPrecautions = "نصب کارت قرمز (Red Card) روی فیدر ۶.۶ کیلوولت و قفل سوییچ سلول ورودی برق اصلی",
+                ppeRequirements = "کفش ایمنی عایق، دستکش چرمی ضدبرش، عینک پلی‌کربنات",
+                createdAt = "1404/10/14 08:00"
+            ),
+            SafetyPermitEntity(
+                id = 3,
+                itemId = 1035, // تخلیه لجن و اورهال کلاریفایر WTP
+                oversightId = 1,
+                permitNumber = "HSE-1404-0103",
+                permitType = "فضای بسته (Confined Space Entry)",
+                status = "issued",
+                executiveUnit = "انرژی و سیالات",
+                location = "WTP - تصفیه‌خانه آب و کلاریفایر",
+                equipmentName = "Clarifier Basin",
+                issueDate = "1404/10/14",
+                validHours = 8,
+                issuedByUserId = 18,
+                issuedByUserName = "مهندس رضایی (HSE)",
+                requiresElectricalLoto = true,
+                electricalLotoStatus = "isolated_and_tagged",
+                electricalTaggedBy = "مهندس البرزی (ناظر برق)",
+                requiresGasTest = true,
+                gasTestResult = "O2: 20.9% | CO: 0 ppm | H2S: 0 ppm",
+                requiresScaffoldingTag = false,
+                fireWatchRequired = false,
+                safetyPrecautions = "برقراری تهویه مداوم با بلوور دمش هوا و حضور نفر مراقب بیرون منهول",
+                ppeRequirements = "چکمه ضداسید، ماسک تنفسی کارتریج‌دار، کلاه ایمنی و چراغ قوه ضدجرقه EX",
+                createdAt = "1404/10/14 08:30"
+            ),
+            SafetyPermitEntity(
+                id = 4,
+                itemId = 1107, // نسوزکاری و آجرچینی داخل کوره
+                oversightId = 1,
+                permitNumber = "HSE-1404-0104",
+                permitType = "فضای بسته و کار در ارتفاع (Confined Space & Height)",
+                status = "issued",
+                executiveUnit = "نسوز",
+                location = "Core Area - داخل راکتور احیا",
+                equipmentName = "Reduction Furnace Interior",
+                issueDate = "1404/10/14",
+                validHours = 12,
+                issuedByUserId = 18,
+                issuedByUserName = "مهندس رضایی (HSE)",
+                requiresElectricalLoto = true,
+                electricalLotoStatus = "isolated_and_tagged",
+                electricalTaggedBy = "مهندس البرزی (ناظر برق)",
+                requiresGasTest = true,
+                gasTestResult = "O2: 20.9% | CO: 0 ppm",
+                requiresScaffoldingTag = true,
+                fireWatchRequired = false,
+                safetyPrecautions = "تایید تگ سبز داربست‌بندی طبقاتی، کنترل روشنایی ولتاژ پایین ۲۴ ولت",
+                ppeRequirements = "لباس کار یکسره، ماسک گرد و غبار P3، هارنس ایمنی، کلاه چانه‌دار",
+                createdAt = "1404/10/14 09:00"
+            ),
+            SafetyPermitEntity(
+                id = 5,
+                itemId = 1684, // تست و سرویس سوئیچ‌گیر 6.6KV
+                oversightId = 1,
+                permitNumber = "HSE-1404-0105",
+                permitType = "ایزولاسیون برقی و ولتاژ بالا (High Voltage Isolation)",
+                status = "pending",
+                executiveUnit = "برق",
+                location = "Core Area - پست برق ۳۳/۶.۶ کیلوولت",
+                equipmentName = "SWG 6.6-M10 & M20",
+                issueDate = "1404/10/14",
+                validHours = 8,
+                issuedByUserId = 18,
+                issuedByUserName = "مهندس رضایی (HSE)",
+                requiresElectricalLoto = true,
+                electricalLotoStatus = "pending_isolation",
+                electricalTaggedBy = "",
+                requiresGasTest = false,
+                gasTestResult = "",
+                requiresScaffoldingTag = false,
+                fireWatchRequired = false,
+                safetyPrecautions = "قطع خط ورودی، تخلیه بار خازنی با ارتینگ ایمن و نصب علائم هشدار خطر برق‌گرفتگی و کارت قرمز",
+                ppeRequirements = "دستکش عایق ۲۰ کیلوولت، شیلد ضد آرک‌فلش، لباس نسوز ضدجرقه",
+                createdAt = "1404/10/14 09:30"
+            )
+        )
+        samplePermits.forEach { dao.insertSafetyPermit(it) }
     }
 
     private fun getGhadirNeyrizOverhaulItems(): List<OversightItemEntity> {

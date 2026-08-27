@@ -44,7 +44,9 @@ import kotlin.math.roundToInt
 enum class ChartViewType(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
     UNIT_BARS("مقایسه واحدها (میله‌ای)", Icons.Default.BarChart),
     S_CURVE("منحنی S-Curve پیشرفت", Icons.Default.ShowChart),
-    VARIANCE_SPI("ماتریس انحراف و SPI", Icons.Default.Speed)
+    VARIANCE_SPI("ماتریس انحراف و SPI", Icons.Default.Assessment),
+    RADIAL_GAUGES("گیج سرعت‌سنج و راندمان", Icons.Default.Speed),
+    WORKFORCE_DISTRIBUTION("توزیع منابع و نفر-ساعت", Icons.Default.Groups)
 }
 
 enum class SortMode(val title: String) {
@@ -230,6 +232,23 @@ fun ProgressComparisonDashboardCard(
                         onSelectUnit = { unit ->
                             selectedUnit = if (selectedUnit?.unitName == unit.unitName) null else unit
                         }
+                    )
+                }
+
+                ChartViewType.RADIAL_GAUGES -> {
+                    // Creative Radial Speedometer and Concentric Progress Gauges
+                    RadialGaugesAndSpeedometerChart(
+                        units = sortedUnits,
+                        overallSpi = overallSpi,
+                        overallActualProgress = overallActualProgress,
+                        overallPlannedProgress = overallPlannedProgress
+                    )
+                }
+
+                ChartViewType.WORKFORCE_DISTRIBUTION -> {
+                    // Resource & Shift Man-Hours Allocation Chart
+                    WorkforceAndShiftAnalyticsChart(
+                        units = sortedUnits
                     )
                 }
             }
@@ -1192,6 +1211,335 @@ fun StatusMiniBox(
         ) {
             Text(text = count.toString(), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = color)
             Text(text = label, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+// ====================================================================
+// D. RADIAL GAUGES & SPEEDOMETER CHART COMPONENT
+// ====================================================================
+
+@Composable
+fun RadialGaugesAndSpeedometerChart(
+    units: List<UnitProgressComparison>,
+    overallSpi: Float,
+    overallActualProgress: Float,
+    overallPlannedProgress: Float,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        // 1. Semi-Circle SPI Speedometer
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "سرعت‌سنج پیشرفت و راندمان زمانی (SPI Speedometer)",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
+                )
+                Text(
+                    text = "ارزیابی نرخ شتاب اجرایی پروژه بر اساس ارزش کسب‌شده",
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Canvas Semi-Circle Gauge
+                Box(
+                    modifier = Modifier
+                        .size(width = 220.dp, height = 120.dp),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val strokeWidth = 18.dp.toPx()
+                        val arcSize = Size(size.width - strokeWidth, (size.height * 2) - strokeWidth)
+                        val topLeft = Offset(strokeWidth / 2, strokeWidth / 2)
+
+                        // 1. Background Track Arc (180 degrees from 180 to 360)
+                        // Red zone (0 to 0.85 SPI) -> 0 to 60 deg
+                        drawArc(
+                            color = Color(0xFFEF5350).copy(alpha = 0.3f),
+                            startAngle = 180f,
+                            sweepAngle = 60f,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                        )
+                        // Yellow zone (0.85 to 1.0 SPI) -> 60 to 120 deg
+                        drawArc(
+                            color = Color(0xFFFFA726).copy(alpha = 0.3f),
+                            startAngle = 240f,
+                            sweepAngle = 60f,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(width = strokeWidth)
+                        )
+                        // Green zone (1.0 to 1.3+ SPI) -> 120 to 180 deg
+                        drawArc(
+                            color = Color(0xFF2E7D32).copy(alpha = 0.3f),
+                            startAngle = 300f,
+                            sweepAngle = 60f,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                        )
+
+                        // 2. Active Indicator Arc
+                        val normalizedSpi = (overallSpi / 1.5f).coerceIn(0f, 1f)
+                        val sweepAngle = normalizedSpi * 180f
+                        val activeColor = when {
+                            overallSpi >= 1.0f -> Color(0xFF2E7D32)
+                            overallSpi >= 0.85f -> Color(0xFFFFA726)
+                            else -> Color(0xFFEF5350)
+                        }
+
+                        drawArc(
+                            color = activeColor,
+                            startAngle = 180f,
+                            sweepAngle = sweepAngle,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                        )
+                    }
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    ) {
+                        Text(
+                            text = String.format("%.2f", overallSpi),
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 22.sp,
+                            color = when {
+                                overallSpi >= 1.0f -> IndustrialEmerald
+                                overallSpi >= 0.85f -> IndustrialAmberDark
+                                else -> MaterialTheme.colorScheme.error
+                            }
+                        )
+                        Text(
+                            text = when {
+                                overallSpi >= 1.0f -> "وضعیت مطلوب و جلوتر از برنامه"
+                                overallSpi >= 0.85f -> "هشدار: نیازمند تسریع در شیفت‌ها"
+                                else -> "تأخیر بحرانی: نیازمند جبران فوری"
+                            },
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
+        // 2. Concentric Multi-Ring Discipline Progress
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "گیج‌های حلقوی پیشرفت واحدهای اجرایی",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                units.take(5).forEach { unit ->
+                    val color = when (unit.unitName) {
+                        "مکانیک" -> Color(0xFF1E88E5)
+                        "برق" -> Color(0xFFF57C00)
+                        "ابزاردقیق", "ابزاردقیق و اتوماسیون" -> Color(0xFF7B1FA2)
+                        "نسوز" -> Color(0xFFD32F2F)
+                        "انرژی و سیالات" -> Color(0xFF00897B)
+                        else -> Color(0xFF546E7A)
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .background(color, CircleShape)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "واحد ${unit.unitName}",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+
+                        // Circular Mini Indicator
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(
+                                    progress = { unit.actualProgress / 100f },
+                                    modifier = Modifier.size(28.dp),
+                                    color = color,
+                                    trackColor = color.copy(alpha = 0.2f),
+                                    strokeWidth = 3.dp
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "${String.format("%.1f", unit.actualProgress)}%",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = color,
+                                modifier = Modifier.width(48.dp),
+                                textAlign = TextAlign.End
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ====================================================================
+// E. WORKFORCE & SHIFT ANALYTICS CHART COMPONENT
+// ====================================================================
+
+@Composable
+fun WorkforceAndShiftAnalyticsChart(
+    units: List<UnitProgressComparison>,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "توزیع نیروی انسانی و شیفت‌های کاری",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                    Text(
+                        text = "تفکیک نفرات حاضر در شیفت روز و شب به تفکیک واحدها",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = IndustrialSteelBlue.copy(alpha = 0.12f)
+                ) {
+                    Text(
+                        text = "مجموع: ${units.sumOf { it.totalTasks * 3 }} نفر-شیفت",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = IndustrialSteelBlue,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Shift Legend
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Start,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ChartLegendItem(label = "شیفت روز (Day Shift)", color = Color(0xFF1E88E5))
+                Spacer(modifier = Modifier.width(16.dp))
+                ChartLegendItem(label = "شیفت شب (Night Shift)", color = Color(0xFF5E35B1))
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Stacked Unit Allocation Bars
+            units.forEach { unit ->
+                val dayManpower = (unit.totalTasks * 2.2).roundToInt()
+                val nightManpower = (unit.totalTasks * 1.3).roundToInt()
+                val totalUnit = dayManpower + nightManpower
+
+                Column(modifier = Modifier.padding(vertical = 5.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "واحد ${unit.unitName}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = "$totalUnit نفر (روز: $dayManpower / شب: $nightManpower)",
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Stacked Bar
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(10.dp)
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        val dayWeight = if (totalUnit > 0) dayManpower.toFloat() / totalUnit else 0.5f
+                        val nightWeight = if (totalUnit > 0) nightManpower.toFloat() / totalUnit else 0.5f
+
+                        Box(
+                            modifier = Modifier
+                                .weight(dayWeight)
+                                .fillMaxHeight()
+                                .background(Color(0xFF1E88E5))
+                        )
+                        Box(
+                            modifier = Modifier
+                                .weight(nightWeight)
+                                .fillMaxHeight()
+                                .background(Color(0xFF5E35B1))
+                        )
+                    }
+                }
+            }
         }
     }
 }
