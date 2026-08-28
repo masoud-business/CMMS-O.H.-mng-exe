@@ -200,7 +200,8 @@ fun OverhaulCoordinationApp(viewModel: MainViewModel) {
                     onSwitchUser = { viewModel.switchUserDirectly(it) },
                     onSelectOversight = { viewModel.selectOversight(it) },
                     onLogout = { viewModel.logout() },
-                    onOpenSettings = { showUserSettingsDialog = true }
+                    onOpenSettings = { showUserSettingsDialog = true },
+                    onResetSeedData = { viewModel.resetAndSeedDatabase() }
                 )
             }
         },

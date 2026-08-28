@@ -33,7 +33,7 @@ import com.example.ui.components.*
 import com.example.ui.theme.*
 
 // ====================================================================
-// 1. APP HEADER WITH RBAC BADGE & LOGOUT & USER SWITCHER
+// 1. APP HEADER WITH RBAC BADGE & CONSOLIDATED USER MENU
 // ====================================================================
 
 @Composable
@@ -45,11 +45,29 @@ fun AppHeader(
     onSwitchUser: (UserEntity) -> Unit,
     onSelectOversight: (Long) -> Unit,
     onLogout: () -> Unit,
-    onOpenSettings: () -> Unit = {}
+    onOpenSettings: () -> Unit = {},
+    onResetSeedData: () -> Unit = {}
 ) {
     var showUserMenu by remember { mutableStateOf(false) }
-    var showOversightMenu by remember { mutableStateOf(false) }
+    var showSwitchUserSubMenu by remember { mutableStateOf(false) }
     var showLogoutConfirm by remember { mutableStateOf(false) }
+    var showResetConfirm by remember { mutableStateOf(false) }
+
+    // Distinct list of personnel for switching (sorted by organizational rank)
+    val distinctPersonnel = remember(allUsers) {
+        allUsers.distinctBy { it.id }.sortedWith(
+            compareBy<UserEntity> {
+                when (it.role) {
+                    "admin" -> 1
+                    "planner" -> 2
+                    "unit_head" -> 3
+                    "supervisor" -> 4
+                    "hse" -> 5
+                    else -> 6
+                }
+            }.thenBy { it.id }
+        )
+    }
 
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -59,7 +77,7 @@ fun AppHeader(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp)
+                .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -67,11 +85,14 @@ fun AppHeader(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Brand Badge & Plant Name
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f, fill = false),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Box(
                         modifier = Modifier
-                            .size(42.dp)
-                            .clip(RoundedCornerShape(10.dp))
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(8.dp))
                             .background(IndustrialNavy),
                         contentAlignment = Alignment.Center
                     ) {
@@ -79,155 +100,310 @@ fun AppHeader(
                             imageVector = Icons.Default.PrecisionManufacturing,
                             contentDescription = "Ghadir Steel Logo",
                             tint = IndustrialAmber,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(22.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Column {
                         Text(
-                            text = "مجتمع فولاد غدیر نی‌ریز",
-                            style = MaterialTheme.typography.titleMedium,
+                            text = "فولاد غدیر نی‌ریز",
+                            style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "کارخانه احیای مستقیم • اورهال سالیانه",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = "اورهال سالیانه احیا ۱۴۰۴",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            fontSize = 10.sp
                         )
                     }
                 }
 
-                // User Role Pill & Logout Action
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box {
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Unified User Profile & Options Dropdown Trigger
+                Box {
+                    Surface(
+                        onClick = { showUserMenu = true },
+                        shape = RoundedCornerShape(20.dp),
+                        color = when (currentUser?.role) {
+                            "admin" -> IndustrialNavy.copy(alpha = 0.12f)
+                            "planner" -> IndustrialPurple.copy(alpha = 0.12f)
+                            "unit_head" -> IndustrialEmerald.copy(alpha = 0.12f)
+                            "hse" -> MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
+                            else -> IndustrialAmber.copy(alpha = 0.15f)
+                        },
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        when (currentUser?.role) {
+                                            "admin" -> IndustrialNavy
+                                            "planner" -> IndustrialPurple
+                                            "unit_head" -> IndustrialEmerald
+                                            "hse" -> MaterialTheme.colorScheme.error
+                                            else -> IndustrialAmber
+                                        }
+                                    )
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Column {
+                                Text(
+                                    text = currentUser?.name?.take(18) ?: "کاربر",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = when (currentUser?.role) {
+                                        "admin" -> "مدیر ارشد"
+                                        "planner" -> "برنامه‌ریز"
+                                        "unit_head" -> "رئیس واحد (${currentUser.unit})"
+                                        "supervisor" -> "ناظر (${currentUser.unit})"
+                                        "hse" -> "سرپرست HSE"
+                                        else -> currentUser?.role ?: ""
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 9.sp,
+                                    maxLines = 1,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "User Menu",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // Comprehensive User Dropdown Menu
+                    DropdownMenu(
+                        expanded = showUserMenu,
+                        onDismissRequest = {
+                            showUserMenu = false
+                            showSwitchUserSubMenu = false
+                        },
+                        modifier = Modifier.widthIn(min = 280.dp, max = 340.dp)
+                    ) {
+                        // User Profile Info Card
                         Surface(
-                            onClick = { showUserMenu = true },
-                            shape = RoundedCornerShape(20.dp),
-                            color = when (currentUser?.role) {
-                                "admin" -> IndustrialNavy.copy(alpha = 0.12f)
-                                "planner" -> IndustrialPurple.copy(alpha = 0.12f)
-                                "unit_head" -> IndustrialEmerald.copy(alpha = 0.12f)
-                                else -> IndustrialAmber.copy(alpha = 0.15f)
-                            },
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier.padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(10.dp)
+                                        .size(40.dp)
                                         .clip(CircleShape)
-                                        .background(
-                                            when (currentUser?.role) {
-                                                "admin" -> IndustrialNavy
-                                                "planner" -> IndustrialPurple
-                                                "unit_head" -> IndustrialEmerald
-                                                else -> IndustrialAmber
-                                            }
-                                        )
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
+                                        .background(MaterialTheme.colorScheme.primaryContainer),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Person,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text(
                                         text = currentUser?.name ?: "کاربر",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.bodyMedium
                                     )
                                     Text(
-                                        text = when (currentUser?.role) {
-                                            "admin" -> "مدیر ارشد"
-                                            "planner" -> "برنامه‌ریز"
-                                            "unit_head" -> "رئیس واحد (${currentUser.unit})"
-                                            "supervisor" -> "ناظر (${currentUser.unit})"
-                                            else -> currentUser?.role ?: ""
-                                        },
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontSize = 10.sp,
+                                        text = "نقش: ${getPersianRole(currentUser?.role ?: "")} | واحد: ${currentUser?.unit ?: "عمومی"}",
+                                        fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
+                                    Text(
+                                        text = "نام کاربری: ${currentUser?.username ?: "-"}",
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
                                 }
-                                Spacer(modifier = Modifier.width(4.dp))
+                            }
+                        }
+
+                        Divider()
+
+                        // 1. Switch User Section (Available for admin or testing)
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = if (showSwitchUserSubMenu) "بستن لیست کاربران ▴" else "سوییچ به حساب سایر پرسنل ▾",
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            },
+                            leadingIcon = {
                                 Icon(
-                                    imageVector = Icons.Default.ArrowDropDown,
-                                    contentDescription = "Switch User",
-                                    modifier = Modifier.size(18.dp)
+                                    imageVector = Icons.Default.SupervisorAccount,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
                                 )
+                            },
+                            onClick = {
+                                showSwitchUserSubMenu = !showSwitchUserSubMenu
                             }
-                        }
-
-                        DropdownMenu(
-                            expanded = showUserMenu,
-                            onDismissRequest = { showUserMenu = false }
-                        ) {
-                            Text(
-                                text = "تغییر نقش کاربری جهت تست RBAC:",
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Divider()
-                            allUsers.forEach { user ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Column {
-                                            Text(user.name, fontWeight = FontWeight.SemiBold)
-                                            Text(
-                                                text = "${getPersianRole(user.role)} • واحد: ${user.unit ?: "عمومی"}",
-                                                fontSize = 11.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = if (user.id == currentUser?.id) Icons.Default.CheckCircle else Icons.Default.Person,
-                                            contentDescription = null,
-                                            tint = if (user.id == currentUser?.id) IndustrialEmerald else Color.Gray
-                                        )
-                                    },
-                                    onClick = {
-                                        onSwitchUser(user)
-                                        showUserMenu = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(6.dp))
-
-                    IconButton(
-                        onClick = onOpenSettings,
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "تنظیمات برنامه و ظاهر",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
                         )
-                    }
 
-                    Spacer(modifier = Modifier.width(4.dp))
+                        if (showSwitchUserSubMenu) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                                    distinctPersonnel.forEach { user ->
+                                        val isCurrent = user.id == currentUser?.id
+                                        DropdownMenuItem(
+                                            text = {
+                                                Column {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Text(
+                                                            text = user.name,
+                                                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
+                                                            fontSize = 12.sp,
+                                                            color = if (isCurrent) IndustrialEmerald else MaterialTheme.colorScheme.onSurface
+                                                        )
+                                                        if (isCurrent) {
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                            Text(
+                                                                text = "(فعلی)",
+                                                                fontSize = 10.sp,
+                                                                color = IndustrialEmerald
+                                                            )
+                                                        }
+                                                    }
+                                                    Text(
+                                                        text = "${getPersianRole(user.role)} • ${user.unit ?: "عمومی"}",
+                                                        fontSize = 10.sp,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            },
+                                            leadingIcon = {
+                                                Icon(
+                                                    imageVector = if (isCurrent) Icons.Default.CheckCircle else Icons.Default.AccountCircle,
+                                                    contentDescription = null,
+                                                    tint = if (isCurrent) IndustrialEmerald else Color.Gray,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            },
+                                            onClick = {
+                                                onSwitchUser(user)
+                                                showUserMenu = false
+                                                showSwitchUserSubMenu = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
 
-                    IconButton(
-                        onClick = { showLogoutConfirm = true },
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Logout,
-                            contentDescription = "خروج از حساب",
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(20.dp)
+                        Divider()
+
+                        // 2. Settings Item
+                        DropdownMenuItem(
+                            text = { Text("تنظیمات برنامه و ظاهر (Theme/Font)") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "تنظیمات",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            onClick = {
+                                showUserMenu = false
+                                onOpenSettings()
+                            }
+                        )
+
+                        // 3. Reset & Re-Seed Data Item
+                        DropdownMenuItem(
+                            text = { Text("بازنشانی و پر کردن داده‌های WBS اورهال") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "بازنشانی داده‌ها",
+                                    tint = IndustrialAmber
+                                )
+                            },
+                            onClick = {
+                                showUserMenu = false
+                                showResetConfirm = true
+                            }
+                        )
+
+                        Divider()
+
+                        // 4. Logout Item
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = "خروج از حساب کاربری (Logout)",
+                                    color = MaterialTheme.colorScheme.error,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Logout,
+                                    contentDescription = "خروج",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            },
+                            onClick = {
+                                showUserMenu = false
+                                showLogoutConfirm = true
+                            }
                         )
                     }
                 }
             }
         }
+    }
+
+    if (showResetConfirm) {
+        AlertDialog(
+            onDismissRequest = { showResetConfirm = false },
+            title = { Text("بازنشانی اطلاعات نمونه اورهال", fontWeight = FontWeight.Bold) },
+            text = { Text("آیا مایلید تمام داده‌های ساختار WBS، پیش‌نیازها، درصد پیشرفت‌های فرضی، لاگ‌های روزانه و پرمیت‌های ایمنی مجدداً در دیتابیس بارگذاری شوند؟") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showResetConfirm = false
+                        onResetSeedData()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = IndustrialAmber)
+                ) {
+                    Text("بازنشانی و بارگذاری مجدد")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetConfirm = false }) {
+                    Text("انصراف")
+                }
+            }
+        )
     }
 
     if (showLogoutConfirm) {

@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.dao.OverhaulDao
 import com.example.data.db.AppDatabase
+import com.example.data.db.GhadirNeyrizDataSeeder
 import com.example.data.entity.*
 import com.example.data.importer.MsProjectImporter
 import com.example.data.importer.ParsedImportPreview
@@ -13,6 +14,7 @@ import com.example.data.service.OverhaulService
 import com.example.data.service.ServiceResult
 import com.example.ui.theme.AppFontScale
 import com.example.ui.theme.AppThemeMode
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -862,6 +864,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val uiMessage: StateFlow<UiMessage?> = _uiMessage.asStateFlow()
 
     init {
+        // اطمینان از مقداردهی اولیه پایگاه داده و ساختار کامل شکست کار WBS اورهال
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val oversight = dao.getOversightById(1)
+                val items = dao.getItemsForOversightDirect(1)
+                val user1 = dao.getUserById(1)
+                if (oversight == null || items.isEmpty() || user1 == null) {
+                    GhadirNeyrizDataSeeder.seedGhadirNeyrizOverhaul(dao)
+                }
+                if (_selectedOversightId.value == null) {
+                    _selectedOversightId.value = 1L
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
         // بازیابی امن نشست کاربر لاگین شده با EncryptedSharedPreferences
         viewModelScope.launch {
             val savedUserId = sessionStorage.getSavedUserId()
@@ -897,6 +916,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (list.isNotEmpty() && _selectedOversightId.value == null) {
                     _selectedOversightId.value = list.first().id
                 }
+            }
+        }
+    }
+
+    fun resetAndSeedDatabase() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                GhadirNeyrizDataSeeder.seedGhadirNeyrizOverhaul(dao)
+                _selectedOversightId.value = 1L
+                _uiMessage.value = UiMessage("ساختار WBS، تسک‌ها، پرمیت‌ها و درصد پیشرفت‌های فرضی با موفقیت بازنشانی شدند.")
+            } catch (e: Exception) {
+                _uiMessage.value = UiMessage("خطا در بازنشانی اطلاعات: ${e.localizedMessage}", isError = true)
             }
         }
     }

@@ -27,7 +27,7 @@ import kotlinx.coroutines.launch
         NotificationEntity::class,
         SafetyPermitEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -45,24 +45,10 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "ghadir_neyriz_overhaul_db"
                 )
-                    .addCallback(DatabaseCallback(scope))
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
                 instance
-            }
-        }
-
-        private class DatabaseCallback(
-            private val scope: CoroutineScope
-        ) : Callback() {
-            override fun onCreate(db: SupportSQLiteDatabase) {
-                super.onCreate(db)
-                INSTANCE?.let { database ->
-                    scope.launch(Dispatchers.IO) {
-                        GhadirNeyrizDataSeeder.seedGhadirNeyrizOverhaul(database.overhaulDao())
-                    }
-                }
             }
         }
     }

@@ -22,8 +22,18 @@ object GhadirNeyrizDataSeeder {
             // مدیر ارشد پروژه اورهال
             UserEntity(
                 id = 1,
+                username = "aemali",
+                password = "1234",
+                name = "مهندس اعمالی",
+                email = "aemali.pm@ghadirsteel.ir",
+                role = "admin",
+                unit = "مدیریت اورهال",
+                siteId = "GHADIR_NEYRIZ"
+            ),
+            UserEntity(
+                id = 101,
                 username = "aamali",
-                password = "123",
+                password = "1234",
                 name = "مهندس اعمالی",
                 email = "aemali.pm@ghadirsteel.ir",
                 role = "admin",
@@ -34,7 +44,7 @@ object GhadirNeyrizDataSeeder {
             UserEntity(
                 id = 2,
                 username = "tajbakhsh",
-                password = "123",
+                password = "1234",
                 name = "مهندس تاج بخش",
                 email = "tajbakhsh.plan@ghadirsteel.ir",
                 role = "planner",
@@ -44,7 +54,7 @@ object GhadirNeyrizDataSeeder {
             UserEntity(
                 id = 3,
                 username = "pourkhandani",
-                password = "123",
+                password = "1234",
                 name = "مهندس پورخندانی",
                 email = "pourkhandani.plan@ghadirsteel.ir",
                 role = "planner",
@@ -54,7 +64,7 @@ object GhadirNeyrizDataSeeder {
             UserEntity(
                 id = 4,
                 username = "allahbakhshi_plan",
-                password = "123",
+                password = "1234",
                 name = "مهندس اله بخشی",
                 email = "allahbakhshi.plan@ghadirsteel.ir",
                 role = "planner",
@@ -64,7 +74,7 @@ object GhadirNeyrizDataSeeder {
             UserEntity(
                 id = 5,
                 username = "shabestan",
-                password = "123",
+                password = "1234",
                 name = "مهندس شبستان",
                 email = "shabestan.plan@ghadirsteel.ir",
                 role = "planner",
@@ -75,8 +85,18 @@ object GhadirNeyrizDataSeeder {
             // واحد تعمیرات مکانیک
             UserEntity(
                 id = 6,
+                username = "elahbakhsh",
+                password = "1234",
+                name = "مهندس اله بخش",
+                email = "allahbakhsh.mech@ghadirsteel.ir",
+                role = "unit_head",
+                unit = "مکانیک",
+                siteId = "GHADIR_NEYRIZ"
+            ),
+            UserEntity(
+                id = 106,
                 username = "allahbakhsh_mech",
-                password = "123",
+                password = "1234",
                 name = "مهندس اله بخش",
                 email = "allahbakhsh.mech@ghadirsteel.ir",
                 role = "unit_head",
@@ -85,8 +105,18 @@ object GhadirNeyrizDataSeeder {
             ),
             UserEntity(
                 id = 7,
+                username = "bagheri",
+                password = "1234",
+                name = "مهندس بقری",
+                email = "baghari.mech@ghadirsteel.ir",
+                role = "supervisor",
+                unit = "مکانیک",
+                siteId = "GHADIR_NEYRIZ"
+            ),
+            UserEntity(
+                id = 107,
                 username = "baghari",
-                password = "123",
+                password = "1234",
                 name = "مهندس بقری",
                 email = "baghari.mech@ghadirsteel.ir",
                 role = "supervisor",
@@ -96,7 +126,7 @@ object GhadirNeyrizDataSeeder {
             UserEntity(
                 id = 8,
                 username = "farrokh",
-                password = "123",
+                password = "1234",
                 name = "مهندس فرخ",
                 email = "farrokh.mech@ghadirsteel.ir",
                 role = "supervisor",
@@ -106,7 +136,7 @@ object GhadirNeyrizDataSeeder {
             UserEntity(
                 id = 9,
                 username = "shojaeifard",
-                password = "123",
+                password = "1234",
                 name = "مهندس شجاعی فرد",
                 email = "shojaeifard.mech@ghadirsteel.ir",
                 role = "supervisor",
@@ -116,7 +146,7 @@ object GhadirNeyrizDataSeeder {
             UserEntity(
                 id = 10,
                 username = "mobaraki",
-                password = "123",
+                password = "1234",
                 name = "مهندس مبارکی",
                 email = "mobaraki.mech@ghadirsteel.ir",
                 role = "supervisor",
@@ -128,7 +158,7 @@ object GhadirNeyrizDataSeeder {
             UserEntity(
                 id = 11,
                 username = "yadegar",
-                password = "123",
+                password = "1234",
                 name = "مهندس یادگار",
                 email = "yadegar.elec@ghadirsteel.ir",
                 role = "unit_head",
@@ -138,7 +168,7 @@ object GhadirNeyrizDataSeeder {
             UserEntity(
                 id = 12,
                 username = "alborzi",
-                password = "123",
+                password = "1234",
                 name = "مهندس البرزی",
                 email = "alborzi.elec@ghadirsteel.ir",
                 role = "supervisor",
@@ -150,7 +180,7 @@ object GhadirNeyrizDataSeeder {
             UserEntity(
                 id = 13,
                 username = "reyhani",
-                password = "123",
+                password = "1234",
                 name = "مهندس ریحانی",
                 email = "reyhani.inst@ghadirsteel.ir",
                 role = "unit_head",
@@ -160,7 +190,7 @@ object GhadirNeyrizDataSeeder {
             UserEntity(
                 id = 14,
                 username = "damiri",
-                password = "123",
+                password = "1234",
                 name = "مهندس دمیری",
                 email = "damiri.inst@ghadirsteel.ir",
                 role = "supervisor",
@@ -172,7 +202,7 @@ object GhadirNeyrizDataSeeder {
             UserEntity(
                 id = 15,
                 username = "yarahmadi",
-                password = "123",
+                password = "1234",
                 name = "مهندس یاراحمدی",
                 email = "yarahmadi.ref@ghadirsteel.ir",
                 role = "unit_head",
@@ -184,7 +214,7 @@ object GhadirNeyrizDataSeeder {
             UserEntity(
                 id = 16,
                 username = "zeyghami",
-                password = "123",
+                password = "1234",
                 name = "مهندس ضیغمی",
                 email = "zeyghami.util@ghadirsteel.ir",
                 role = "unit_head",
@@ -196,7 +226,7 @@ object GhadirNeyrizDataSeeder {
             UserEntity(
                 id = 17,
                 username = "khaki",
-                password = "123",
+                password = "1234",
                 name = "مهندس خاکی",
                 email = "khaki.qc@ghadirsteel.ir",
                 role = "unit_head",
@@ -207,8 +237,18 @@ object GhadirNeyrizDataSeeder {
             // واحد ایمنی، بهداشت و محیط زیست (HSE)
             UserEntity(
                 id = 18,
+                username = "rezaei",
+                password = "1234",
+                name = "مهندس رضایی (سرپرست ایمنی و بهداشت HSE)",
+                email = "rezaei.hse@ghadirsteel.ir",
+                role = "hse",
+                unit = "ایمنی و بهداشت (HSE)",
+                siteId = "GHADIR_NEYRIZ"
+            ),
+            UserEntity(
+                id = 118,
                 username = "rezaei_hse",
-                password = "123",
+                password = "1234",
                 name = "مهندس رضایی (سرپرست ایمنی و بهداشت HSE)",
                 email = "rezaei.hse@ghadirsteel.ir",
                 role = "hse",
