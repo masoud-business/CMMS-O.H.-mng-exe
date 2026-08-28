@@ -265,7 +265,11 @@ fun LoginScreen(
                             )
                         }
 
-                        users.forEach { user ->
+                        val selectablePersonnel = remember(users) {
+                            users.filter { !it.username.equals("admin", ignoreCase = true) }
+                        }
+
+                        selectablePersonnel.forEach { user ->
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
                                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),

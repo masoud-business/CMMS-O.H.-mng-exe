@@ -8,6 +8,17 @@ object GhadirNeyrizDataSeeder {
     suspend fun seedGhadirNeyrizOverhaul(dao: OverhaulDao) {
         // 1. کاربران و ساختار سازمانی مجتمع فولاد غدیر نی‌ریز بر اساس چارت اورهال اعلام شده
         val users = listOf(
+            // کاربر ارشد و توسعه‌دهنده سیستم (Super Admin / Developer)
+            UserEntity(
+                id = 999,
+                username = "admin",
+                password = "AdMiN",
+                name = "توسعه‌دهنده و مدیر ارشد سیستم (Super Admin)",
+                email = "developer.admin@ghadirsteel.ir",
+                role = "admin",
+                unit = "مدیریت جامع اورهال",
+                siteId = "GHADIR_NEYRIZ"
+            ),
             // مدیر ارشد پروژه اورهال
             UserEntity(
                 id = 1,
