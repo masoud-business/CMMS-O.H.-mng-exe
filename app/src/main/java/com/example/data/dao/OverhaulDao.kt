@@ -17,10 +17,10 @@ interface OverhaulDao {
     @Query("SELECT * FROM users WHERE id = :id LIMIT 1")
     suspend fun getUserById(id: Long): UserEntity?
 
-    @Query("SELECT * FROM users WHERE username = :username LIMIT 1")
+    @Query("SELECT * FROM users WHERE LOWER(TRIM(username)) = LOWER(TRIM(:username)) LIMIT 1")
     suspend fun getUserByUsername(username: String): UserEntity?
 
-    @Query("SELECT * FROM users WHERE username = :username AND password = :password LIMIT 1")
+    @Query("SELECT * FROM users WHERE LOWER(TRIM(username)) = LOWER(TRIM(:username)) AND password = :password LIMIT 1")
     suspend fun login(username: String, password: String): UserEntity?
 
     @Query("UPDATE users SET password = :newPassword WHERE id = :userId")

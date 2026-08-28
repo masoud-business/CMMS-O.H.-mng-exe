@@ -25,6 +25,7 @@ import androidx.compose.ui.window.Dialog
 import com.example.data.entity.ItemAssignmentEntity
 import com.example.data.entity.ItemPrerequisiteEntity
 import com.example.data.entity.OversightItemEntity
+import com.example.data.entity.SafetyPermitEntity
 import com.example.data.entity.UserEntity
 import com.example.ui.SupervisorFilter
 import com.example.ui.TaskLogisticsTag
@@ -32,6 +33,87 @@ import com.example.ui.WbsTreeNode
 import com.example.ui.WbsViewMode
 import com.example.ui.getLogisticsTagsForItem
 import com.example.ui.theme.*
+
+@Composable
+fun SafetyPermitBadge(
+    permit: SafetyPermitEntity?,
+    logisticsTags: List<TaskLogisticsTag>,
+    modifier: Modifier = Modifier
+) {
+    if (permit != null) {
+        val (badgeColor, icon, text) = when (permit.status) {
+            "issued" -> Triple(Color(0xFF059669), Icons.Default.VerifiedUser, "پرمیت صادر شد")
+            "pending" -> Triple(Color(0xFFD97706), Icons.Default.HourglassTop, "در انتظار پرمیت")
+            "suspended" -> Triple(Color(0xFFDC2626), Icons.Default.GppBad, "پرمیت متوقف")
+            "closed" -> Triple(Color(0xFF4B5563), Icons.Default.CheckCircle, "پرمیت بسته شد")
+            else -> Triple(Color.Gray, Icons.Default.Shield, permit.status)
+        }
+
+        Surface(
+            shape = RoundedCornerShape(5.dp),
+            color = badgeColor.copy(alpha = 0.12f),
+            border = BorderStroke(0.8.dp, badgeColor.copy(alpha = 0.5f)),
+            modifier = modifier
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = "وضعیت پرمیت ایمنی",
+                    tint = badgeColor,
+                    modifier = Modifier.size(11.dp)
+                )
+                Spacer(modifier = Modifier.width(3.dp))
+                Text(
+                    text = text,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = badgeColor
+                )
+                if (permit.requiresElectricalLoto) {
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = "LOTO",
+                        tint = if (permit.electricalLotoStatus == "isolated_and_tagged") Color(0xFFDC2626) else Color(0xFFD97706),
+                        modifier = Modifier.size(10.dp)
+                    )
+                }
+            }
+        }
+    } else {
+        val needsPermit = logisticsTags.any { it.id == "HOT_WORK" || it.id == "LOTO" || it.id == "FLUSHING" || it.id == "SCAFFOLDING" }
+        if (needsPermit) {
+            Surface(
+                shape = RoundedCornerShape(5.dp),
+                color = Color(0xFFEA580C).copy(alpha = 0.09f),
+                border = BorderStroke(0.8.dp, Color(0xFFEA580C).copy(alpha = 0.35f)),
+                modifier = modifier
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Shield,
+                        contentDescription = "نیازمند پرمیت",
+                        tint = Color(0xFFEA580C),
+                        modifier = Modifier.size(10.dp)
+                    )
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Text(
+                        text = "نیازمند پرمیت",
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFEA580C)
+                    )
+                }
+            }
+        }
+    }
+}
 
 fun getUnitColor(unitName: String): Color {
     return when {
@@ -130,6 +212,7 @@ fun WbsHierarchyManagementView(
     allPrerequisites: List<ItemPrerequisiteEntity>,
     allAssignments: List<ItemAssignmentEntity>,
     allUsers: List<UserEntity>,
+    allSafetyPermits: List<SafetyPermitEntity> = emptyList(),
     currentUser: UserEntity?,
     searchQuery: String,
     selectedUnit: String?,

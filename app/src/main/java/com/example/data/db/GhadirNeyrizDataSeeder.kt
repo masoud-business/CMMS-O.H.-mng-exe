@@ -234,9 +234,19 @@ object GhadirNeyrizDataSeeder {
                 siteId = "GHADIR_NEYRIZ"
             ),
 
-            // واحد ایمنی، بهداشت و محیط زیست (HSE)
+            // واحد ایمنی، بهداشت و محیط زیست (HSE - اکانت عمومی و اختصاصی)
             UserEntity(
                 id = 18,
+                username = "hse",
+                password = "1234",
+                name = "واحد ایمنی و بهداشت (HSE)",
+                email = "hse@ghadirsteel.ir",
+                role = "hse",
+                unit = "ایمنی و بهداشت (HSE)",
+                siteId = "GHADIR_NEYRIZ"
+            ),
+            UserEntity(
+                id = 19,
                 username = "rezaei",
                 password = "1234",
                 name = "مهندس رضایی (سرپرست ایمنی و بهداشت HSE)",

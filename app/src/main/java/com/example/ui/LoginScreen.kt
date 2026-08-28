@@ -299,6 +299,7 @@ fun LoginScreen(
                                                         "admin" -> IndustrialNavy
                                                         "planner" -> IndustrialPurple
                                                         "unit_head" -> IndustrialEmerald
+                                                        "hse" -> Color(0xFF0F766E)
                                                         else -> IndustrialAmber
                                                     }
                                                 ),
@@ -332,6 +333,7 @@ fun LoginScreen(
                                             "admin" -> IndustrialNavy.copy(alpha = 0.15f)
                                             "planner" -> IndustrialPurple.copy(alpha = 0.15f)
                                             "unit_head" -> IndustrialEmerald.copy(alpha = 0.15f)
+                                            "hse" -> Color(0xFF0F766E).copy(alpha = 0.15f)
                                             else -> IndustrialAmber.copy(alpha = 0.15f)
                                         }
                                     ) {
@@ -341,6 +343,7 @@ fun LoginScreen(
                                                 "planner" -> "برنامه‌ریز"
                                                 "unit_head" -> "رئیس واحد"
                                                 "supervisor" -> "ناظر اجرایی"
+                                                "hse" -> "ایمنی (HSE)"
                                                 else -> user.role
                                             },
                                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -350,6 +353,7 @@ fun LoginScreen(
                                                 "admin" -> IndustrialNavy
                                                 "planner" -> IndustrialPurple
                                                 "unit_head" -> IndustrialEmerald
+                                                "hse" -> Color(0xFF0F766E)
                                                 else -> IndustrialAmber
                                             }
                                         )

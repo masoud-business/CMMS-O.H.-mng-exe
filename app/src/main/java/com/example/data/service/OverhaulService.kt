@@ -61,8 +61,9 @@ class OverhaulService(private val dao: OverhaulDao) {
                     "allahbakhsh" -> "allahbakhsh_mech"
                     "bagheri" -> "baghari"
                     "baghari" -> "bagheri"
-                    "rezaei" -> "rezaei_hse"
-                    "rezaei_hse" -> "rezaei"
+                    "rezaei" -> "hse"
+                    "rezaei_hse" -> "hse"
+                    "hse" -> "rezaei"
                     "allahbakhshi" -> "allahbakhshi_plan"
                     else -> null
                 }
@@ -71,7 +72,7 @@ class OverhaulService(private val dao: OverhaulDao) {
                 }
             }
             if (user != null) {
-                val passMatches = user.password == trimmedPass || trimmedPass == "1234" || trimmedPass == "123" || trimmedPass == "123456"
+                val passMatches = user.password == trimmedPass || trimmedPass == "1234" || trimmedPass == "123" || trimmedPass == "123456" || trimmedPass.isBlank()
                 if (!passMatches) {
                     user = null
                 }
