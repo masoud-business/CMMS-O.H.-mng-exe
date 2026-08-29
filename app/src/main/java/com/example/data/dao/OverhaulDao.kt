@@ -164,6 +164,15 @@ interface OverhaulDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDailyWorkLog(log: DailyWorkLogEntity): Long
 
+    @Update
+    suspend fun updateDailyWorkLog(log: DailyWorkLogEntity)
+
+    @Query("DELETE FROM daily_work_logs WHERE id = :logId")
+    suspend fun deleteDailyWorkLog(logId: Long)
+
+    @Query("SELECT * FROM daily_work_logs WHERE id = :logId LIMIT 1")
+    suspend fun getDailyLogById(logId: Long): DailyWorkLogEntity?
+
     @Query("SELECT * FROM daily_work_logs WHERE oversightId = :oversightId ORDER BY id DESC")
     fun getDailyLogsForOversight(oversightId: Long): Flow<List<DailyWorkLogEntity>>
 

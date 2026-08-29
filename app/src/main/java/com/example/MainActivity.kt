@@ -140,6 +140,7 @@ fun OverhaulCoordinationApp(viewModel: MainViewModel) {
     var activeSessionIdForNote by remember { mutableStateOf<Long?>(null) }
     var showAddProcurementDialog by remember { mutableStateOf(false) }
     var showUserSettingsDialog by remember { mutableStateOf(false) }
+    var showProjectReportDialog by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -341,7 +342,10 @@ fun OverhaulCoordinationApp(viewModel: MainViewModel) {
                     onLoadSampleGhadirData = { viewModel.loadGhadirNeyrizSampleCsvForPreview() },
                     onCommitImport = { viewModel.commitMsProjectImport() },
                     onCancelPreview = { viewModel.cancelImportPreview() },
-                    onClearExport = { viewModel.clearExportedMspCsv() }
+                    onClearExport = { viewModel.clearExportedMspCsv() },
+                    onCorrectDailyLog = { logId, progress, manpower, hours, remarks, issues ->
+                        viewModel.correctDailyWorkLog(logId, progress, manpower, hours, remarks, issues)
+                    }
                 )
 
                 AppTab.SESSIONS -> SessionsDecisionsTab(
@@ -514,21 +518,37 @@ fun OverhaulCoordinationApp(viewModel: MainViewModel) {
     if (showUserSettingsDialog) {
         val currentThemeMode by viewModel.appThemeMode.collectAsStateWithLifecycle()
         val currentFontScale by viewModel.appFontScale.collectAsStateWithLifecycle()
+        val currentPersianFont by viewModel.appPersianFont.collectAsStateWithLifecycle()
 
         UserSettingsDialog(
             user = currentUser,
             currentThemeMode = currentThemeMode,
             currentFontScale = currentFontScale,
+            currentPersianFont = currentPersianFont,
             onSetThemeMode = { mode ->
                 viewModel.setThemeMode(mode)
             },
             onSetFontScale = { scale ->
                 viewModel.setFontScale(scale)
             },
+            onSetPersianFont = { font ->
+                viewModel.setPersianFont(font)
+            },
             onChangePassword = { oldPass, newPass, confirmPass ->
                 viewModel.changePassword(oldPass, newPass, confirmPass)
             },
+            onViewProjectReport = {
+                showUserSettingsDialog = false
+                showProjectReportDialog = true
+            },
             onDismiss = { showUserSettingsDialog = false }
+        )
+    }
+
+    // 8. Project Technical Report & Documentation Dialog
+    if (showProjectReportDialog) {
+        ProjectReportViewerDialog(
+            onDismiss = { showProjectReportDialog = false }
         )
     }
 }

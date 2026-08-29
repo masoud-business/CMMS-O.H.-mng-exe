@@ -61,9 +61,11 @@ class OverhaulService(private val dao: OverhaulDao) {
                     "allahbakhsh" -> "allahbakhsh_mech"
                     "bagheri" -> "baghari"
                     "baghari" -> "bagheri"
+                    "mohebiran" -> "hse"
+                    "moheb_iran" -> "hse"
                     "rezaei" -> "hse"
                     "rezaei_hse" -> "hse"
-                    "hse" -> "rezaei"
+                    "hse" -> "mohebiran"
                     "allahbakhshi" -> "allahbakhshi_plan"
                     else -> null
                 }
@@ -506,6 +508,96 @@ class OverhaulService(private val dao: OverhaulDao) {
         )
 
         return ServiceResult.Success(Unit, "گزارش پیشرفت، نفرات و ساعات کارکرد با موفقیت ثبت شد.")
+    }
+
+    /**
+     * اصلاح و ویرایش گزارش کارکرد روزانه ثبت‌شده قبل از آپلود / همگام‌سازی نهایی
+     * مجاز توسط: ۱. خود ناظر ثبت‌کننده ۲. رئیس واحد مربوطه ۳. برنامه‌ریز و مدیر ارشد
+     */
+    suspend fun correctDailyWorkLog(
+        user: UserEntity,
+        logId: Long,
+        newProgress: Int,
+        newManpowerCount: Int,
+        newHoursSpent: Double,
+        newRemarks: String,
+        newIssues: String
+    ): ServiceResult<Unit> {
+        val existingLog = dao.getDailyLogById(logId)
+            ?: return ServiceResult.Error("گزارش روزانه مورد نظر یافت نشد.", code = 404)
+
+        val item = dao.getItemById(existingLog.itemId)
+            ?: return ServiceResult.Error("فعالیت مرتبط با این گزارش یافت نشد.", code = 404)
+
+        // بررسی اینکه آیا قبلاً آپلود نهایی شده یا خیر
+        if (existingLog.syncedToMsp && user.role != "admin" && user.role != "planner") {
+            return ServiceResult.Error("این گزارش قبلاً به MSP / سرور مرکزی آپلود شده و قفل است. فقط برنامه‌ریز یا مدیر مجاز به اصلاح آن هستند.", code = 403)
+        }
+
+        // بررسی سطح دسترسی: خود ثبت‌کننده، رئیس واحد هم‌نام، برنامه‌ریز، یا مدیر
+        val isCreator = existingLog.recordedByUserId == user.id
+        val isUnitHead = (user.role == "supervisor" || user.role == "unit_head") && (user.unit == existingLog.unitName || user.unit == item.executiveUnit)
+        val isPrivileged = user.role == "admin" || user.role == "planner"
+
+        if (!isCreator && !isUnitHead && !isPrivileged) {
+            return ServiceResult.Error("خطای دسترسی ۴۰۳: فقط خود کاربر ثبت‌کننده یا رئیس واحد «${existingLog.unitName}» مجاز به اصلاح این گزارش هستند.", code = 403)
+        }
+
+        val todayDate = getCurrentDate()
+        val oldProgress = existingLog.progressPercentage
+        val oldHours = existingLog.hoursSpent
+        val oldManpower = existingLog.manpowerCount
+
+        // به‌روزرسانی رکورد لاگ
+        val updatedLog = existingLog.copy(
+            progressPercentage = newProgress,
+            manpowerCount = newManpowerCount,
+            hoursSpent = newHoursSpent,
+            remarks = if (newRemarks.isNotBlank()) newRemarks else existingLog.remarks,
+            issues = newIssues
+        )
+        dao.updateDailyWorkLog(updatedLog)
+
+        // تعدیل ساعت کارکرد تسک WBS
+        val hourDiff = newHoursSpent - oldHours
+        val adjustedActualHours = (item.actualHours + hourDiff).coerceAtLeast(0.0)
+        val finalStatus = when {
+            newProgress >= 100 -> "completed"
+            newProgress > 0 -> "in_progress"
+            else -> item.status
+        }
+
+        val updatedItem = item.copy(
+            progressPercentage = newProgress,
+            actualHours = adjustedActualHours,
+            manpowerCount = newManpowerCount,
+            status = finalStatus,
+            lastUpdatedDate = todayDate,
+            issues = if (newIssues.isNotBlank()) newIssues else item.issues
+        )
+        dao.updateItem(updatedItem)
+
+        // محاسبه مجدد گره‌های والد
+        recalculateParentRollups(item.oversightId)
+
+        // ثبت دقیق در جدول تاریخچه ممیزی (Audit Trail)
+        val editorRoleLabel = if (isUnitHead) "رئیس واحد ${user.unit}" else if (isCreator) "ناظر ثبت‌کننده" else "برنامه‌ریز/مدیر"
+        dao.insertAuditLog(
+            AuditLogEntity(
+                entityType = "daily_work_log",
+                entityId = logId,
+                action = "CORRECT_WORK_LOG",
+                performedByUserId = user.id,
+                performedByUserName = user.name,
+                performedByUserRole = user.role,
+                beforeStateJson = "{\"progress\": $oldProgress, \"hours\": $oldHours, \"manpower\": $oldManpower, \"recordedBy\": \"${existingLog.recordedByUserName}\"}",
+                afterStateJson = "{\"progress\": $newProgress, \"hours\": $newHoursSpent, \"manpower\": $newManpowerCount, \"editor\": \"${user.name}\"}",
+                remarks = "اصلاح گزارش توسط $editorRoleLabel (${user.name}) برای فعالیت ${item.wbsCode}: تغییر پیشرفت از $oldProgress% به $newProgress%",
+                timestamp = getCurrentTimestamp()
+            )
+        )
+
+        return ServiceResult.Success(Unit, "گزارش روزانه با موفقیت اصلاح شد و تاریخچه تغییرات ثبت گردید.")
     }
 
     // ==========================================

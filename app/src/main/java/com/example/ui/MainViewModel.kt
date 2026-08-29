@@ -227,6 +227,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val fontScale: StateFlow<Float> = _fontScale.asStateFlow()
     val appFontScale: StateFlow<Float> = _fontScale.asStateFlow()
 
+    private val _persianFont = MutableStateFlow(
+        try {
+            com.example.ui.theme.PersianFontFamilyOption.valueOf(
+                prefs.getString("app_persian_font", com.example.ui.theme.PersianFontFamilyOption.VAZIRMATN.name)
+                    ?: com.example.ui.theme.PersianFontFamilyOption.VAZIRMATN.name
+            )
+        } catch (e: Exception) {
+            com.example.ui.theme.PersianFontFamilyOption.VAZIRMATN
+        }
+    )
+    val appPersianFont: StateFlow<com.example.ui.theme.PersianFontFamilyOption> = _persianFont.asStateFlow()
+
+    fun setPersianFont(font: com.example.ui.theme.PersianFontFamilyOption) {
+        _persianFont.value = font
+        prefs.edit().putString("app_persian_font", font.name).apply()
+    }
+
     fun setThemeMode(mode: AppThemeMode) {
         _themeMode.value = mode
         prefs.edit().putString("app_theme_mode", mode.name).apply()
@@ -1020,6 +1037,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 status = status,
                 remarks = remarks,
                 issues = issues
+            )
+            handleServiceResult(result)
+        }
+    }
+
+    /**
+     * اصلاح و تصحیح گزارش کارکرد روزانه ثبت‌شده قبل از آپلود یا توسط رئیس واحد
+     */
+    fun correctDailyWorkLog(
+        logId: Long,
+        newProgress: Int,
+        newManpowerCount: Int,
+        newHoursSpent: Double,
+        newRemarks: String,
+        newIssues: String
+    ) {
+        val user = _currentUser.value ?: return
+        viewModelScope.launch {
+            val result = service.correctDailyWorkLog(
+                user = user,
+                logId = logId,
+                newProgress = newProgress,
+                newManpowerCount = newManpowerCount,
+                newHoursSpent = newHoursSpent,
+                newRemarks = newRemarks,
+                newIssues = newIssues
             )
             handleServiceResult(result)
         }

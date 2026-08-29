@@ -30,12 +30,15 @@ fun UserSettingsDialog(
     user: UserEntity?,
     currentThemeMode: AppThemeMode,
     currentFontScale: Float,
+    currentPersianFont: PersianFontFamilyOption = PersianFontFamilyOption.VAZIRMATN,
     onSetThemeMode: (AppThemeMode) -> Unit,
     onSetFontScale: (Float) -> Unit,
+    onSetPersianFont: (PersianFontFamilyOption) -> Unit = {},
+    onViewProjectReport: () -> Unit = {},
     onChangePassword: (oldPass: String, newPass: String, confirmPass: String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var selectedTab by remember { mutableStateOf(0) } // 0: عمومی و ظاهر, 1: تغییر رمز عبور
+    var selectedTab by remember { mutableStateOf(0) } // 0: ظاهر و قلم, 1: مستندات و گزارش ساخت, 2: امنیت و رمز عبور
 
     var oldPassword by remember { mutableStateOf("") }
     var newPassword by remember { mutableStateOf("") }
@@ -184,7 +187,7 @@ fun UserSettingsDialog(
                     Spacer(modifier = Modifier.height(14.dp))
                 }
 
-                // Tab Switcher (Appearance vs. Security)
+                // Tab Switcher (Appearance, Project Report, Security)
                 TabRow(
                     selectedTabIndex = selectedTab,
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
@@ -197,9 +200,9 @@ fun UserSettingsDialog(
                         onClick = { selectedTab = 0 },
                         text = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Palette, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("پوسته و اندازه قلم", fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal, fontSize = 12.sp)
+                                Icon(Icons.Default.Palette, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("پوسته و قلم", fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal, fontSize = 11.sp)
                             }
                         },
                         modifier = Modifier
@@ -215,9 +218,9 @@ fun UserSettingsDialog(
                         onClick = { selectedTab = 1 },
                         text = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("تغییر رمز عبور", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal, fontSize = 12.sp)
+                                Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("گزارش پروژه", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal, fontSize = 11.sp)
                             }
                         },
                         modifier = Modifier
@@ -227,11 +230,29 @@ fun UserSettingsDialog(
                                 RoundedCornerShape(8.dp)
                             )
                     )
+
+                    Tab(
+                        selected = selectedTab == 2,
+                        onClick = { selectedTab = 2 },
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("امنیت", fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Normal, fontSize = 11.sp)
+                            }
+                        },
+                        modifier = Modifier
+                            .padding(2.dp)
+                            .background(
+                                if (selectedTab == 2) MaterialTheme.colorScheme.surface else Color.Transparent,
+                                RoundedCornerShape(8.dp)
+                            )
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Tab 0: Appearance (Theme & Font Scaling)
+                // Tab 0: Appearance (Theme & Font Scaling & Persian Font Selection)
                 if (selectedTab == 0) {
                     // Theme Selector
                     Text(
@@ -282,6 +303,72 @@ fun UserSettingsDialog(
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                         color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(18.dp))
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Persian Font Family Selector
+                    Text(
+                        text = "فونت فارسی متون (Persian Typography)",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "فونت رسمی مهندسی و گزارشات اداری را انتخاب فرمایید:",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        PersianFontFamilyOption.values().forEach { fontOpt ->
+                            val isSelected = currentPersianFont == fontOpt
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isSelected) IndustrialSteelBlue.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isSelected) IndustrialSteelBlue else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onSetPersianFont(fontOpt) }
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = fontOpt.displayName,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            fontSize = 12.sp,
+                                            color = if (isSelected) IndustrialSteelBlue else MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = fontOpt.description,
+                                            fontSize = 9.5.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    if (isSelected) {
+                                        Icon(
+                                            Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = IndustrialSteelBlue,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -381,8 +468,57 @@ fun UserSettingsDialog(
                     }
                 }
 
-                // Tab 1: Password Change
+                // Tab 1: Project Engineering Report & Documentation
                 if (selectedTab == 1) {
+                    Text(
+                        text = "مستندات و گزارش جامع پروژه ساخت سامانه",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "شامل شرح اهداف، معماری نرم‌افزار، ماتریس دسترسی‌ها، جداول WBS، موتورهای Rollup و تاریخچه کامل ریویژن‌ها",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = IndustrialSteelBlue.copy(alpha = 0.1f),
+                        border = BorderStroke(1.dp, IndustrialSteelBlue.copy(alpha = 0.3f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Article, contentDescription = null, tint = IndustrialSteelBlue, modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("شناسنامه فنی پروژه اورهال فولاد غدیر نی‌ریز", fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text("• ویرایش: ریویژن ۵.۲ (Rev 5.2 - Production Release)", fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("• تعداد کدهای ساختار WBS: بیش از ۲۵۰ فعالیت در ۷ سطح", fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("• ماژول‌ها: WBS، پرمیت‌های ایمنی، لاگ کارکرد، ممیزی، جلسات، قطعات", fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("• پایگاه‌داده: SQLite Room با قابلیت کارکرد ۱۰۰٪ آفلاین", fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Button(
+                                onClick = onViewProjectReport,
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = IndustrialSteelBlue),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("مشاهده و دریافت گزارش کامل پروژه (Report)", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+
+                // Tab 2: Password Change
+                if (selectedTab == 2) {
                     Text(
                         text = "تغییر کلمه عبور حساب کاربری",
                         fontWeight = FontWeight.Bold,

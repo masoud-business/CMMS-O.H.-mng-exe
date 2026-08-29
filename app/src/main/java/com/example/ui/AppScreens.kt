@@ -9,8 +9,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -2222,9 +2224,11 @@ fun MspSyncTab(
     onLoadSampleGhadirData: () -> Unit,
     onCommitImport: () -> Unit,
     onCancelPreview: () -> Unit,
-    onClearExport: () -> Unit
+    onClearExport: () -> Unit,
+    onCorrectDailyLog: ((logId: Long, newProgress: Int, newManpower: Int, newHours: Double, newRemarks: String, newIssues: String) -> Unit)? = null
 ) {
     var showImportDialog by remember { mutableStateOf(false) }
+    var selectedLogForCorrection by remember { mutableStateOf<DailyWorkLogEntity?>(null) }
 
     LazyColumn(
         modifier = Modifier
@@ -2427,21 +2431,54 @@ fun MspSyncTab(
                             }
                         }
 
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = IndustrialEmerald.copy(alpha = 0.15f)
-                        ) {
-                            Text(
-                                text = log.date,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                fontSize = 10.sp,
-                                color = IndustrialEmerald
-                            )
+                        Column(horizontalAlignment = Alignment.End) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (log.syncedToMsp) IndustrialEmerald.copy(alpha = 0.15f) else IndustrialAmber.copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    text = if (log.syncedToMsp) "${log.date} • همگام‌شده" else "${log.date} • در انتظار آپلود",
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    fontSize = 10.sp,
+                                    color = if (log.syncedToMsp) IndustrialEmerald else IndustrialAmberDark,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+
+                            val isCreator = log.recordedByUserId == currentUser?.id
+                            val isUnitHead = (currentUser?.role == "supervisor" || currentUser?.role == "unit_head") && (currentUser.unit == log.unitName)
+                            val isAdminOrPlanner = currentUser?.role == "admin" || currentUser?.role == "planner"
+                            val canEdit = (isCreator || isUnitHead || isAdminOrPlanner) && (!log.syncedToMsp || isAdminOrPlanner)
+
+                            if (canEdit && onCorrectDailyLog != null) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                OutlinedButton(
+                                    onClick = { selectedLogForCorrection = log },
+                                    shape = RoundedCornerShape(6.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(26.dp)
+                                ) {
+                                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(12.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("اصلاح اطلاعات", fontSize = 10.sp)
+                                }
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    selectedLogForCorrection?.let { logToCorrect ->
+        EditDailyWorkLogDialog(
+            log = logToCorrect,
+            onDismiss = { selectedLogForCorrection = null },
+            onConfirm = { progress, manpower, hours, remarks, issues ->
+                onCorrectDailyLog?.invoke(logToCorrect.id, progress, manpower, hours, remarks, issues)
+                selectedLogForCorrection = null
+            }
+        )
     }
 
     if (showImportDialog) {
@@ -3580,6 +3617,222 @@ fun AddProcurementRequestDialog(
                         }
                     }) {
                         Text("ارسال درخواست")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun EditDailyWorkLogDialog(
+    log: DailyWorkLogEntity,
+    onDismiss: () -> Unit,
+    onConfirm: (progress: Int, manpower: Int, hours: Double, remarks: String, issues: String) -> Unit
+) {
+    var progressSlider by remember { mutableStateOf(log.progressPercentage.toFloat()) }
+    var manpowerText by remember { mutableStateOf(log.manpowerCount.toString()) }
+    var hoursText by remember { mutableStateOf(log.hoursSpent.toString()) }
+    var remarksText by remember { mutableStateOf(log.remarks) }
+    var issuesText by remember { mutableStateOf(log.issues) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = CircleShape,
+                        color = IndustrialAmber.copy(alpha = 0.2f),
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.EditNote, contentDescription = null, tint = IndustrialAmberDark, modifier = Modifier.size(20.dp))
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text("اصلاح گزارش کارکرد روزانه", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text("واحد ${log.unitName} • ناظر ثبت‌کننده: ${log.recordedByUserName}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = IndustrialAmber.copy(alpha = 0.1f),
+                    border = BorderStroke(1.dp, IndustrialAmber.copy(alpha = 0.3f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "توجه: تمامی اصلاحات، مقادیر قبلی و مشخصات کاربری که ویرایش را انجام می‌دهد در جدول ممیزی (Audit Trail) سیستم ثبت و ماندگار خواهد شد.",
+                        fontSize = 10.sp,
+                        color = IndustrialAmberDark,
+                        modifier = Modifier.padding(8.dp)
+                    )
+                }
+
+                // Progress Slider
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("درصد پیشرفت اصلاح‌شده:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("${progressSlider.toInt()}%", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = IndustrialSteelBlue)
+                    }
+                    Slider(
+                        value = progressSlider,
+                        onValueChange = { progressSlider = it },
+                        valueRange = 0f..100f,
+                        steps = 99
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = manpowerText,
+                        onValueChange = { manpowerText = it.filter { c -> c.isDigit() } },
+                        label = { Text("نفرات حاضر") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = hoursText,
+                        onValueChange = { hoursText = it },
+                        label = { Text("ساعت کارکرد") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                }
+
+                OutlinedTextField(
+                    value = remarksText,
+                    onValueChange = { remarksText = it },
+                    label = { Text("شرح اقدامات / توضیحات اصلاحی") },
+                    maxLines = 2,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = issuesText,
+                    onValueChange = { issuesText = it },
+                    label = { Text("موانع یا هماهنگی‌های لازم") },
+                    maxLines = 2,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) { Text("انصراف") }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            val mp = manpowerText.toIntOrNull() ?: log.manpowerCount
+                            val hrs = hoursText.toDoubleOrNull() ?: log.hoursSpent
+                            onConfirm(progressSlider.toInt(), mp, hrs, remarksText, issuesText)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = IndustrialSteelBlue)
+                    ) {
+                        Text("ثبت اصلاحیه و لاگ ممیزی")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ProjectReportViewerDialog(
+    onDismiss: () -> Unit
+) {
+    val reportText = remember { com.example.util.ProjectReportGenerator.generateFullProjectReport() }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+            modifier = Modifier
+                .fillMaxWidth(0.95f)
+                .fillMaxHeight(0.9f)
+                .padding(12.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.MenuBook, contentDescription = null, tint = IndustrialSteelBlue, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("گزارش فنی و مستندات پروژه ساخت اپلیکیشن", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                            Text("اورهال مجتمع فولاد غدیر نی‌ریز • ریویژن ۵.۲", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "بستن")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFF1E1E1E),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(12.dp)
+                    ) {
+                        Text(
+                            text = reportText,
+                            color = Color(0xFFE0E0E0),
+                            fontSize = 11.sp,
+                            lineHeight = 18.sp,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(onClick = onDismiss, shape = RoundedCornerShape(8.dp)) {
+                        Text("بستن گزارش")
                     }
                 }
             }

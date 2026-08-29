@@ -234,12 +234,12 @@ object GhadirNeyrizDataSeeder {
                 siteId = "GHADIR_NEYRIZ"
             ),
 
-            // واحد ایمنی، بهداشت و محیط زیست (HSE - اکانت عمومی و اختصاصی)
+            // واحد ایمنی، بهداشت و محیط زیست (HSE - مهندس محب ایران)
             UserEntity(
                 id = 18,
                 username = "hse",
                 password = "1234",
-                name = "واحد ایمنی و بهداشت (HSE)",
+                name = "مهندس محب ایران (سرپرست ایمنی و بهداشت HSE)",
                 email = "hse@ghadirsteel.ir",
                 role = "hse",
                 unit = "ایمنی و بهداشت (HSE)",
@@ -247,24 +247,24 @@ object GhadirNeyrizDataSeeder {
             ),
             UserEntity(
                 id = 19,
-                username = "rezaei",
+                username = "mohebiran",
                 password = "1234",
-                name = "مهندس رضایی (سرپرست ایمنی و بهداشت HSE)",
-                email = "rezaei.hse@ghadirsteel.ir",
+                name = "مهندس محب ایران (سرپرست ایمنی و بهداشت HSE)",
+                email = "mohebiran.hse@ghadirsteel.ir",
                 role = "hse",
                 unit = "ایمنی و بهداشت (HSE)",
                 siteId = "GHADIR_NEYRIZ"
             ),
             UserEntity(
                 id = 118,
-                username = "rezaei_hse",
+                username = "rezaei",
                 password = "1234",
-                name = "مهندس رضایی (سرپرست ایمنی و بهداشت HSE)",
-                email = "rezaei.hse@ghadirsteel.ir",
+                name = "مهندس محب ایران (HSE)",
+                email = "mohebiran@ghadirsteel.ir",
                 role = "hse",
                 unit = "ایمنی و بهداشت (HSE)",
                 siteId = "GHADIR_NEYRIZ"
-            )
+            ),
         )
         dao.insertUsers(users)
 
