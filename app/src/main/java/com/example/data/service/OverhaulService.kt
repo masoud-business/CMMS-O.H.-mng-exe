@@ -417,6 +417,15 @@ class OverhaulService(private val dao: OverhaulDao) {
         val item = dao.getItemById(itemId)
             ?: return ServiceResult.Error("فعالیت مورد نظر یافت نشد.", code = 404)
 
+        // بررسی اینکه آیا این آیتم یک گره خلاصه (Summary/Parent) است یا فعالیت اجرایی (Leaf)
+        val children = dao.getDirectChildrenList(itemId)
+        if (children.isNotEmpty()) {
+            return ServiceResult.Error(
+                "خطا: ثبت درصد و گزارش کارکرد فقط بر روی فعالیت‌های اجرایی (Leaf) مجاز است. این ردیف یک سطح خلاصه (Summary/WBS) است و درصد آن به صورت خودکار از زیرمجموعه‌ها محاسبه می‌شود.",
+                code = 422
+            )
+        }
+
         // بررسی دسترسی: سرپرست فقط مجاز به ویرایش تسک‌های واحد خود یا تخصیص یافته است (مدیر و برنامه‌ریز همیشه دسترسی دارند)
         if (user.role == "supervisor") {
             val isSameUnit = user.unit == null || user.unit == item.executiveUnit
@@ -431,21 +440,38 @@ class OverhaulService(private val dao: OverhaulDao) {
             }
         }
 
-        // بررسی پیش‌نیازها در صورت شروع کار
-        if (status == "in_progress" && item.status == "pending") {
+        // بررسی پیش‌نیازهای Finish-to-Start (FS)
+        if (newProgress > 0) {
             val prerequisites = dao.getPrerequisiteItemsDirect(itemId)
-            val incompletePrereqs = prerequisites.filter { it.status != "completed" }
+            val incompletePrereqs = prerequisites.filter { it.progressPercentage < 100 || it.status != "completed" }
 
             if (incompletePrereqs.isNotEmpty()) {
                 val errorDetails = incompletePrereqs.map {
-                    "پیش‌نیاز [کد ${it.wbsCode}: ${it.title}] در وضعیت «${getPersianStatusLabel(it.status)}» است."
+                    "پیش‌نیاز کد [${it.wbsCode}: ${it.title}] در وضعیت «${getPersianStatusLabel(it.status)}» (پیشرفت: ${it.progressPercentage}%) است و باید به ۱۰۰٪ برسد."
                 }
                 return ServiceResult.Error(
-                    message = "هشدار: پیش‌نیازهای زیر هنوز تکمیل نشده‌اند:",
+                    message = "خطای پیش‌نیاز (FS): فعالیت‌های پیش‌نیاز تکمیل نشده‌اند و امکان ثبت پیشرفت وجود ندارد:",
                     details = errorDetails,
                     code = 422
                 )
             }
+        }
+
+        // بررسی قانون بازرسی فنی (QC 95% Cap): فعالیتهایی که نیاز به تایید بازرسی فنی دارند بدون تایید QC حداکثر تا ۹۵٪ مجاز هستند
+        if (item.requiresTechnicalInspection && !item.qcApproved && newProgress > 95) {
+            return ServiceResult.Error(
+                "محدودیت بازرسی فنی (QC): این فعالیت نیازمند بازرسی فنی و تایید کیفی است. تا قبل از ثبت تاییدیه نهایی توسط واحد بازرسی فنی (مهندس خاکی)، حداکثر تا ۹۵٪ امکان ثبت پیشرفت وجود دارد.",
+                code = 422
+            )
+        }
+
+        // بررسی پرمیت ایمنی: در صورتی که پرمیت متوقف باشد، اجازه پیشرفت داده نمی‌شود
+        val permit = dao.getSafetyPermitForItemDirect(itemId)
+        if (permit != null && permit.status == "suspended") {
+            return ServiceResult.Error(
+                "توقف توسط ایمنی (HSE): پرمیت ایمنی این فعالیت به علت «${permit.stopReason ?: "عدم رعایت الزامات ایمنی"}» متوقف شده است. تا رفع موارد توقف توسط مهندس محب ایران، امکان ثبت پیشرفت وجود ندارد.",
+                code = 422
+            )
         }
 
         val todayDate = getCurrentDate()
@@ -708,7 +734,7 @@ class OverhaulService(private val dao: OverhaulDao) {
     }
 
     // ==========================================
-    // 6. PROCUREMENT & CONTRACTOR REQUESTS
+    // 6. PROCUREMENT & SUPPLY CHAIN PIPELINE (مهندس بازرگان و تایید دو مرحله‌ای)
     // ==========================================
 
     suspend fun createProcurementRequest(user: UserEntity, request: ProcurementRequestEntity): ServiceResult<Long> {
@@ -716,6 +742,7 @@ class OverhaulService(private val dao: OverhaulDao) {
             status = "requested",
             requestedByUserId = user.id,
             requestedByUserName = user.name,
+            requestingUnit = if (request.requestingUnit.isNotBlank()) request.requestingUnit else (user.unit ?: "عمومی"),
             createdAt = getCurrentTimestamp()
         )
         val id = dao.insertProcurement(req)
@@ -728,54 +755,306 @@ class OverhaulService(private val dao: OverhaulDao) {
                 performedByUserName = user.name,
                 performedByUserRole = user.role,
                 beforeStateJson = "{}",
-                afterStateJson = "{\"title\": \"${req.title}\", \"status\": \"requested\"}",
-                remarks = "ثبت درخواست خرید/تأمین جدید",
+                afterStateJson = "{\"title\": \"${req.title}\", \"code\": \"${req.materialCode}\", \"unit\": \"${req.requestingUnit}\"}",
+                remarks = "ثبت درخواست تامین متریال/قطعه جدید",
                 timestamp = getCurrentTimestamp()
             )
         )
-        return ServiceResult.Success(id, "درخواست تأمین با موفقیت ثبت شد و در انتظار تأیید برنامه‌ریزی است.")
+        return ServiceResult.Success(id, "درخواست تأمین با موفقیت ثبت شد و به کارتابل رئیس واحد ارسال گردید.")
     }
 
-    suspend fun updateProcurementStatus(
-        user: UserEntity,
-        requestId: Long,
-        newStatus: String,
-        rejectionReason: String? = null
-    ): ServiceResult<Unit> {
+    suspend fun approveProcurementByUnitHead(user: UserEntity, requestId: Long): ServiceResult<Unit> {
         val existing = dao.getProcurementById(requestId)
-            ?: return ServiceResult.Error("درخواست خرید یافت نشد.", code = 404)
+            ?: return ServiceResult.Error("درخواست کالا یافت نشد.", code = 404)
 
-        if (newStatus == "approved" || newStatus == "rejected" || newStatus == "ordered" || newStatus == "received") {
-            if (user.role != "admin" && user.role != "planner") {
-                return ServiceResult.Error("خطای دسترسی ۴۰۳: تأیید، رد یا تغییر وضعیت سفارش خرید فقط در حیطه اختیارات Planner و Admin است.", code = 403)
-            }
+        if (user.role != "admin" && user.role != "unit_head" && user.role != "planner") {
+            return ServiceResult.Error("خطای دسترسی ۴۰۳: تایید مرحله اول فقط در اختیار رئیس واحد متقاضی یا مدیر است.", code = 403)
         }
 
         val updated = existing.copy(
-            status = newStatus,
-            approvedByUserId = if (newStatus == "approved") user.id else existing.approvedByUserId,
-            approvedByUserName = if (newStatus == "approved") user.name else existing.approvedByUserName,
-            rejectionReason = if (newStatus == "rejected") rejectionReason else existing.rejectionReason
+            unitHeadApproved = true,
+            unitHeadApprovedBy = "${user.name} (${user.unit ?: "رئیس واحد"})",
+            status = "unit_head_approved"
         )
-
         dao.updateProcurement(updated)
 
         dao.insertAuditLog(
             AuditLogEntity(
                 entityType = "procurement_request",
                 entityId = requestId,
-                action = if (newStatus == "approved") "APPROVED" else if (newStatus == "rejected") "REJECTED" else "STATUS_CHANGE",
+                action = "UNIT_HEAD_APPROVAL",
                 performedByUserId = user.id,
                 performedByUserName = user.name,
                 performedByUserRole = user.role,
                 beforeStateJson = "{\"status\": \"${existing.status}\"}",
-                afterStateJson = "{\"status\": \"$newStatus\"}",
-                remarks = if (newStatus == "rejected") "رد درخواست به علت: $rejectionReason" else "تغییر وضعیت به $newStatus",
+                afterStateJson = "{\"status\": \"unit_head_approved\", \"approvedBy\": \"${user.name}\"}",
+                remarks = "تایید مرحله اول (رئیس واحد) برای درخواست کالا",
                 timestamp = getCurrentTimestamp()
             )
         )
 
-        return ServiceResult.Success(Unit, "وضعیت درخواست خرید به‌روزرسانی شد.")
+        return ServiceResult.Success(Unit, "درخواست توسط رئیس واحد تایید شد و جهت تایید نهایی برای مدیر پروژه (مهندس اعمالی) ارسال شد.")
+    }
+
+    suspend fun approveProcurementByProjectManager(user: UserEntity, requestId: Long): ServiceResult<Unit> {
+        val existing = dao.getProcurementById(requestId)
+            ?: return ServiceResult.Error("درخواست کالا یافت نشد.", code = 404)
+
+        if (user.role != "admin" && user.role != "planner") {
+            return ServiceResult.Error("خطای دسترسی ۴۰۳: تایید مرحله دوم فقط در اختیار مدیر پروژه (مهندس اعمالی) یا مدیر ارشد است.", code = 403)
+        }
+
+        val updated = existing.copy(
+            projectManagerApproved = true,
+            projectManagerApprovedBy = "${user.name} (مدیریت پروژه اورهال)",
+            status = "pm_approved",
+            commercialRepName = "مهندس بازرگان (واحد بازرگانی)"
+        )
+        dao.updateProcurement(updated)
+
+        dao.insertAuditLog(
+            AuditLogEntity(
+                entityType = "procurement_request",
+                entityId = requestId,
+                action = "PM_APPROVAL",
+                performedByUserId = user.id,
+                performedByUserName = user.name,
+                performedByUserRole = user.role,
+                beforeStateJson = "{\"status\": \"${existing.status}\"}",
+                afterStateJson = "{\"status\": \"pm_approved\", \"commercialRep\": \"مهندس بازرگان\"}",
+                remarks = "تایید نهایی مدیر پروژه اورهال و ارجاع به نماینده بازرگانی (مهندس بازرگان)",
+                timestamp = getCurrentTimestamp()
+            )
+        )
+
+        return ServiceResult.Success(Unit, "درخواست به تایید مدیر پروژه رسید و به مهندس بازرگان (واحد بازرگانی) ابلاغ گردید.")
+    }
+
+    suspend fun fulfillProcurementByCommercial(
+        user: UserEntity,
+        requestId: Long,
+        status: String, // "in_procurement", "supplied_available", "rejected"
+        warehouseLocation: String = "",
+        rejectionReason: String? = null
+    ): ServiceResult<Unit> {
+        val existing = dao.getProcurementById(requestId)
+            ?: return ServiceResult.Error("درخواست کالا یافت نشد.", code = 404)
+
+        if (user.role != "commercial" && user.role != "admin" && user.role != "planner") {
+            return ServiceResult.Error("خطای دسترسی ۴۰۳: تغییر وضعیت بازرگانی و تعیین محل انبار در اختیار مهندس بازرگان یا مدیر است.", code = 403)
+        }
+
+        val todayDate = getCurrentDate()
+        val updated = existing.copy(
+            status = status,
+            warehouseLocation = warehouseLocation,
+            supplyDate = if (status == "supplied_available") todayDate else existing.supplyDate,
+            rejectionReason = rejectionReason,
+            commercialRepName = user.name
+        )
+        dao.updateProcurement(updated)
+
+        dao.insertAuditLog(
+            AuditLogEntity(
+                entityType = "procurement_request",
+                entityId = requestId,
+                action = "COMMERCIAL_UPDATE",
+                performedByUserId = user.id,
+                performedByUserName = user.name,
+                performedByUserRole = user.role,
+                beforeStateJson = "{\"status\": \"${existing.status}\"}",
+                afterStateJson = "{\"status\": \"$status\", \"warehouse\": \"$warehouseLocation\"}",
+                remarks = "ثبت وضعیت تامین توسط مهندس بازرگان: $status (محل انبار: $warehouseLocation)",
+                timestamp = getCurrentTimestamp()
+            )
+        )
+
+        return ServiceResult.Success(Unit, "وضعیت تامین قطعه توسط واحد بازرگانی با موفقیت ثبت شد.")
+    }
+
+    // ==========================================
+    // 7. QC & TECHNICAL INSPECTION (مهندس خاکی)
+    // ==========================================
+
+    suspend fun approveQcInspection(user: UserEntity, itemId: Long): ServiceResult<Unit> {
+        val item = dao.getItemById(itemId)
+            ?: return ServiceResult.Error("فعالیت مورد نظر یافت نشد.", code = 404)
+
+        if (user.role != "qc" && user.role != "admin" && user.unit != "بازرسی فنی") {
+            return ServiceResult.Error("خطای دسترسی ۴۰۳: تایید بازرسی فنی فقط در اختیار واحد بازرسی فنی (مهندس خاکی) یا مدیر است.", code = 403)
+        }
+
+        val timestamp = getCurrentTimestamp()
+        val approverName = "${user.name} (بازرسی فنی QC)"
+        dao.updateItemQcStatus(itemId, qcApproved = true, qcApprovedBy = approverName, qcApprovalDate = timestamp)
+
+        dao.insertAuditLog(
+            AuditLogEntity(
+                entityType = "oversight_item",
+                entityId = itemId,
+                action = "QC_APPROVAL",
+                performedByUserId = user.id,
+                performedByUserName = user.name,
+                performedByUserRole = user.role,
+                beforeStateJson = "{\"qcApproved\": false}",
+                afterStateJson = "{\"qcApproved\": true, \"approver\": \"$approverName\"}",
+                remarks = "تایید کیفی و بازرسی فنی NDT/QC توسط $approverName برای فعالیت ${item.wbsCode}",
+                timestamp = timestamp
+            )
+        )
+
+        return ServiceResult.Success(Unit, "تاییدیه بازرسی فنی با موفقیت ثبت شد. سقف پیشرفت این فعالیت آزاد گردید.")
+    }
+
+    // ==========================================
+    // 8. SAFETY & HSE PERMITS (مهندس محب ایران)
+    // ==========================================
+
+    suspend fun requestSafetyPermit(user: UserEntity, permit: SafetyPermitEntity): ServiceResult<Long> {
+        val newPermit = permit.copy(
+            status = "requested",
+            requestedByUserId = user.id,
+            requestedByUserName = user.name,
+            createdAt = getCurrentTimestamp()
+        )
+        val id = dao.insertSafetyPermit(newPermit)
+
+        dao.insertAuditLog(
+            AuditLogEntity(
+                entityType = "safety_permit",
+                entityId = id,
+                action = "REQUEST_PERMIT",
+                performedByUserId = user.id,
+                performedByUserName = user.name,
+                performedByUserRole = user.role,
+                beforeStateJson = "{}",
+                afterStateJson = "{\"permitNumber\": \"${newPermit.permitNumber}\", \"type\": \"${newPermit.permitType}\"}",
+                remarks = "درخواست صدور پرمیت ایمنی توسط ${user.name} برای واحد ${newPermit.executiveUnit}",
+                timestamp = getCurrentTimestamp()
+            )
+        )
+
+        return ServiceResult.Success(id, "درخواست پرمیت ایمنی ثبت شد و به کارتابل مهندس محب ایران (HSE) ارسال گردید.")
+    }
+
+    suspend fun issueSafetyPermit(
+        user: UserEntity,
+        permitId: Long,
+        validHours: Int,
+        ppeRequirements: String,
+        gasTestResult: String,
+        safetyPrecautions: String,
+        lotoStatus: String,
+        electricalTaggedBy: String,
+        checklistJson: String = ""
+    ): ServiceResult<Unit> {
+        val existing = dao.getSafetyPermitById(permitId)
+            ?: return ServiceResult.Error("پرمیت ایمنی یافت نشد.", code = 404)
+
+        if (user.role != "hse" && user.role != "admin") {
+            return ServiceResult.Error("خطای دسترسی ۴۰۳: صدور و تایید پرمیت ایمنی فقط در حیطه اختیارات واحد ایمنی و بهداشت HSE (مهندس محب ایران) است.", code = 403)
+        }
+
+        val todayDate = getCurrentDate()
+        val updated = existing.copy(
+            status = "issued",
+            issueDate = todayDate,
+            validHours = validHours,
+            issuedByUserId = user.id,
+            issuedByUserName = "${user.name} (HSE)",
+            ppeRequirements = ppeRequirements,
+            gasTestResult = gasTestResult,
+            safetyPrecautions = safetyPrecautions,
+            electricalLotoStatus = lotoStatus,
+            electricalTaggedBy = electricalTaggedBy,
+            checklistResultsJson = checklistJson,
+            stopReason = "",
+            stopDetails = ""
+        )
+        dao.updateSafetyPermit(updated)
+
+        dao.insertAuditLog(
+            AuditLogEntity(
+                entityType = "safety_permit",
+                entityId = permitId,
+                action = "ISSUE_PERMIT",
+                performedByUserId = user.id,
+                performedByUserName = user.name,
+                performedByUserRole = user.role,
+                beforeStateJson = "{\"status\": \"${existing.status}\"}",
+                afterStateJson = "{\"status\": \"issued\", \"validHours\": $validHours, \"issuedBy\": \"${user.name}\"}",
+                remarks = "صدور رسمی مجوز ایمنی و کار HSE توسط مهندس محب ایران",
+                timestamp = getCurrentTimestamp()
+            )
+        )
+
+        return ServiceResult.Success(Unit, "پرمیت ایمنی با موفقیت صادر و تایید گردید.")
+    }
+
+    suspend fun suspendSafetyPermit(
+        user: UserEntity,
+        permitId: Long,
+        stopReason: String,
+        stopDetails: String
+    ): ServiceResult<Unit> {
+        val existing = dao.getSafetyPermitById(permitId)
+            ?: return ServiceResult.Error("پرمیت ایمنی یافت نشد.", code = 404)
+
+        if (user.role != "hse" && user.role != "admin") {
+            return ServiceResult.Error("خطای دسترسی ۴۰۳: توقف یا لغو پرمیت ایمنی منحصراً در اختیار واحد HSE (مهندس محب ایران) است.", code = 403)
+        }
+
+        dao.updateSafetyPermitSuspension(permitId, "suspended", stopReason, stopDetails)
+
+        dao.insertAuditLog(
+            AuditLogEntity(
+                entityType = "safety_permit",
+                entityId = permitId,
+                action = "SUSPEND_PERMIT",
+                performedByUserId = user.id,
+                performedByUserName = user.name,
+                performedByUserRole = user.role,
+                beforeStateJson = "{\"status\": \"${existing.status}\"}",
+                afterStateJson = "{\"status\": \"suspended\", \"reason\": \"$stopReason\"}",
+                remarks = "توقف فوری کار توسط HSE به دلیل: $stopReason ($stopDetails)",
+                timestamp = getCurrentTimestamp()
+            )
+        )
+
+        return ServiceResult.Success(Unit, "پرمیت ایمنی متوقف شد و کار روی این فعالیت تا رفع نواقص متوقف گردید.")
+    }
+
+    suspend fun resumeSafetyPermit(user: UserEntity, permitId: Long): ServiceResult<Unit> {
+        val existing = dao.getSafetyPermitById(permitId)
+            ?: return ServiceResult.Error("پرمیت ایمنی یافت نشد.", code = 404)
+
+        if (user.role != "hse" && user.role != "admin") {
+            return ServiceResult.Error("خطای دسترسی ۴۰۳: رفع توقف پرمیت ایمنی فقط توسط مهندس محب ایران (HSE) امکان‌پذیر است.", code = 403)
+        }
+
+        val updated = existing.copy(
+            status = "issued",
+            stopReason = "",
+            stopDetails = ""
+        )
+        dao.updateSafetyPermit(updated)
+
+        dao.insertAuditLog(
+            AuditLogEntity(
+                entityType = "safety_permit",
+                entityId = permitId,
+                action = "RESUME_PERMIT",
+                performedByUserId = user.id,
+                performedByUserName = user.name,
+                performedByUserRole = user.role,
+                beforeStateJson = "{\"status\": \"suspended\"}",
+                afterStateJson = "{\"status\": \"issued\"}",
+                remarks = "رفع توقف پرمیت و صدور مجوز ادامه کار توسط مهندس محب ایران",
+                timestamp = getCurrentTimestamp()
+            )
+        )
+
+        return ServiceResult.Success(Unit, "توقف پرمیت رفع شد و ادامه اجرای فعالیت مجاز گردید.")
     }
 
     fun getPersianStatusLabel(status: String): String = when (status) {
@@ -783,6 +1062,9 @@ class OverhaulService(private val dao: OverhaulDao) {
         "in_progress" -> "در حال اجرا"
         "completed" -> "تکمیل شده"
         "blocked" -> "متوقف / دارای مانع"
+        "suspended" -> "متوقف توسط ایمنی"
+        "issued" -> "صادر شده"
+        "requested" -> "درخواست شده"
         else -> status
     }
 }

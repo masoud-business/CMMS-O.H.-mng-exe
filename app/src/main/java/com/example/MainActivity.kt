@@ -326,7 +326,10 @@ fun OverhaulCoordinationApp(viewModel: MainViewModel) {
                     permits = safetyPermits,
                     wbsItems = rawItems,
                     currentUser = currentUser,
-                    onIssuePermit = { viewModel.issueSafetyPermit(it) },
+                    onIssuePermit = { viewModel.requestSafetyPermit(it) },
+                    onRequestPermit = { viewModel.requestSafetyPermit(it) },
+                    onSuspendPermit = { id, reason, details -> viewModel.suspendSafetyPermit(id, reason, details) },
+                    onResumePermit = { id -> viewModel.resumeSafetyPermit(id) },
                     onUpdatePermitStatus = { id, status -> viewModel.updateSafetyPermitStatus(id, status) },
                     onUpdateLotoStatus = { id, status, taggedBy -> viewModel.updateElectricalLotoStatus(id, status, taggedBy) },
                     onDeletePermit = { viewModel.deleteSafetyPermit(it) }

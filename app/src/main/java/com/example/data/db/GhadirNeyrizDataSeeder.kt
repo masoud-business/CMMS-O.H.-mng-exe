@@ -240,9 +240,9 @@ object GhadirNeyrizDataSeeder {
                 username = "hse",
                 password = "1234",
                 name = "مهندس محب ایران (سرپرست ایمنی و بهداشت HSE)",
-                email = "hse@ghadirsteel.ir",
+                email = "mohebiran.hse@ghadirsteel.ir",
                 role = "hse",
-                unit = "ایمنی و بهداشت (HSE)",
+                unit = "HSE و ایمنی",
                 siteId = "GHADIR_NEYRIZ"
             ),
             UserEntity(
@@ -252,7 +252,7 @@ object GhadirNeyrizDataSeeder {
                 name = "مهندس محب ایران (سرپرست ایمنی و بهداشت HSE)",
                 email = "mohebiran.hse@ghadirsteel.ir",
                 role = "hse",
-                unit = "ایمنی و بهداشت (HSE)",
+                unit = "HSE و ایمنی",
                 siteId = "GHADIR_NEYRIZ"
             ),
             UserEntity(
@@ -262,9 +262,21 @@ object GhadirNeyrizDataSeeder {
                 name = "مهندس محب ایران (HSE)",
                 email = "mohebiran@ghadirsteel.ir",
                 role = "hse",
-                unit = "ایمنی و بهداشت (HSE)",
+                unit = "HSE و ایمنی",
                 siteId = "GHADIR_NEYRIZ"
             ),
+
+            // واحد بازرگانی و خرید کالا (مهندس بازرگان)
+            UserEntity(
+                id = 20,
+                username = "bazargan",
+                password = "1234",
+                name = "مهندس بازرگان (نماینده بازرگانی و خرید کالا)",
+                email = "bazargan.proc@ghadirsteel.ir",
+                role = "commercial",
+                unit = "بازرگانی و تامین کالا",
+                siteId = "GHADIR_NEYRIZ"
+            )
         )
         dao.insertUsers(users)
 
@@ -514,72 +526,95 @@ object GhadirNeyrizDataSeeder {
         )
         decisions.forEach { dao.insertSessionDecision(it) }
 
-        // 8. اقلام تدارکات و درخواست‌های تامین قطعات بحرانی
+        // 8. اقلام تدارکات و درخواست‌های تامین قطعات بحرانی با پیگیری مهندس بازرگان
         val procurementItems = listOf(
             ProcurementRequestEntity(
                 id = 1,
                 itemId = 259,
                 sessionId = 1,
+                materialCode = "MAT-COMP-4102",
                 title = "مجموعه بیرینگ ژورنال و تراست کمپرسور گاز پروسس (Demag/Atlas Copco)",
+                requestingUnit = "مکانیک",
                 itemType = "equipment",
                 quantity = "۲ ست",
-                estimatedCost = "تامین اضطراری اورهال",
-                status = "received",
+                status = "supplied_available",
                 requestedByUserId = 6,
                 requestedByUserName = "مهندس اله بخش",
-                approvedByUserId = 1,
-                approvedByUserName = "مهندس اعمالی",
+                unitHeadApproved = true,
+                unitHeadApprovedBy = "مهندس اله بخش (مکانیک)",
+                projectManagerApproved = true,
+                projectManagerApprovedBy = "مهندس اعمالی (مدیر اورهال)",
+                commercialRepName = "مهندس بازرگان (واحد بازرگانی)",
+                warehouseLocation = "انبار مرکزی قطعات یدکی - قفسه D4",
+                supplyDate = "1404/10/12",
                 createdAt = "1404/10/05"
             ),
             ProcurementRequestEntity(
                 id = 2,
                 itemId = 17,
                 sessionId = 1,
+                materialCode = "MAT-FURN-1088",
                 title = "قسمت میانی شارژ هاپر کوره احیا با ورق ضد سایش Hardox 500",
+                requestingUnit = "مکانیک",
                 itemType = "equipment",
                 quantity = "۱ دست کامل",
-                estimatedCost = "موجود در محوطه دپو",
-                status = "received",
+                status = "supplied_available",
                 requestedByUserId = 6,
                 requestedByUserName = "مهندس اله بخش",
-                approvedByUserId = 1,
-                approvedByUserName = "مهندس اعمالی",
+                unitHeadApproved = true,
+                unitHeadApprovedBy = "مهندس اله بخش (مکانیک)",
+                projectManagerApproved = true,
+                projectManagerApprovedBy = "مهندس اعمالی (مدیر اورهال)",
+                commercialRepName = "مهندس بازرگان (واحد بازرگانی)",
+                warehouseLocation = "محوطه دپوی قطعات سنگین کوره",
+                supplyDate = "1404/10/10",
                 createdAt = "1404/10/01"
             ),
             ProcurementRequestEntity(
                 id = 3,
                 itemId = 1046,
                 sessionId = 1,
+                materialCode = "MAT-WTP-3015",
                 title = "ست کامل رابرهای ضدسایش پاروهای مکانیزم کلاریفایر WTP",
+                requestingUnit = "انرژی و سیالات",
                 itemType = "goods",
                 quantity = "۲۴ تیغه",
-                estimatedCost = "تحویل انبار WTP",
-                status = "received",
+                status = "in_procurement",
                 requestedByUserId = 16,
                 requestedByUserName = "مهندس ضیغمی",
-                approvedByUserId = 1,
-                approvedByUserName = "مهندس اعمالی",
+                unitHeadApproved = true,
+                unitHeadApprovedBy = "مهندس ضیغمی (انرژی و سیالات)",
+                projectManagerApproved = true,
+                projectManagerApprovedBy = "مهندس اعمالی (مدیر اورهال)",
+                commercialRepName = "مهندس بازرگان (واحد بازرگانی)",
+                warehouseLocation = "در حال بارگیری از تامین‌کننده اصفهان",
                 createdAt = "1404/10/08"
             ),
             ProcurementRequestEntity(
                 id = 4,
                 itemId = 1107,
                 sessionId = 1,
+                materialCode = "MAT-REF-9022",
                 title = "جرم ریختنی آلومینایی کم سیمان (LCC) ویژه داکت‌های باستل و تاپ‌گس کوره",
+                requestingUnit = "نسوز",
                 itemType = "goods",
                 quantity = "۴۵ تن",
-                estimatedCost = "تحویل انبار مسقف نسوز",
-                status = "received",
+                status = "supplied_available",
                 requestedByUserId = 15,
                 requestedByUserName = "مهندس یاراحمدی",
-                approvedByUserId = 1,
-                approvedByUserName = "مهندس اعمالی",
+                unitHeadApproved = true,
+                unitHeadApprovedBy = "مهندس یاراحمدی (نسوز)",
+                projectManagerApproved = true,
+                projectManagerApprovedBy = "مهندس اعمالی (مدیر اورهال)",
+                commercialRepName = "مهندس بازرگان (واحد بازرگانی)",
+                warehouseLocation = "انبار مسقف نسوز - پالت ۱۲ تا ۱۵",
+                supplyDate = "1404/10/09",
                 createdAt = "1404/10/02"
             )
         )
         procurementItems.forEach { dao.insertProcurement(it) }
 
-        // 9. پرمیت‌های ایمنی کارگاهی و مجوزهای کار گرم، فضای بسته و LOTO برق
+        // 9. پرمیت‌های ایمنی کارگاهی و مجوزهای کار گرم، فضای بسته و LOTO برق (واحد HSE - مهندس محب ایران)
         val samplePermits = listOf(
             SafetyPermitEntity(
                 id = 1,
@@ -593,8 +628,10 @@ object GhadirNeyrizDataSeeder {
                 equipmentName = "Furnace Charge Hopper",
                 issueDate = "1404/10/14",
                 validHours = 12,
+                requestedByUserId = 6,
+                requestedByUserName = "مهندس اله بخش",
                 issuedByUserId = 18,
-                issuedByUserName = "مهندس رضایی (HSE)",
+                issuedByUserName = "مهندس محب ایران (HSE)",
                 requiresElectricalLoto = true,
                 electricalLotoStatus = "isolated_and_tagged",
                 electricalTaggedBy = "مهندس البرزی (ناظر برق)",
@@ -618,8 +655,10 @@ object GhadirNeyrizDataSeeder {
                 equipmentName = "Process Gas Compressor 6.6KV",
                 issueDate = "1404/10/14",
                 validHours = 24,
+                requestedByUserId = 8,
+                requestedByUserName = "مهندس فرخ",
                 issuedByUserId = 18,
-                issuedByUserName = "مهندس رضایی (HSE)",
+                issuedByUserName = "مهندس محب ایران (HSE)",
                 requiresElectricalLoto = true,
                 electricalLotoStatus = "isolated_and_tagged",
                 electricalTaggedBy = "مهندس یادگار (مدیر واحد برق)",
@@ -643,8 +682,10 @@ object GhadirNeyrizDataSeeder {
                 equipmentName = "Clarifier Basin",
                 issueDate = "1404/10/14",
                 validHours = 8,
+                requestedByUserId = 16,
+                requestedByUserName = "مهندس ضیغمی",
                 issuedByUserId = 18,
-                issuedByUserName = "مهندس رضایی (HSE)",
+                issuedByUserName = "مهندس محب ایران (HSE)",
                 requiresElectricalLoto = true,
                 electricalLotoStatus = "isolated_and_tagged",
                 electricalTaggedBy = "مهندس البرزی (ناظر برق)",
@@ -668,8 +709,10 @@ object GhadirNeyrizDataSeeder {
                 equipmentName = "Reduction Furnace Interior",
                 issueDate = "1404/10/14",
                 validHours = 12,
+                requestedByUserId = 15,
+                requestedByUserName = "مهندس یاراحمدی",
                 issuedByUserId = 18,
-                issuedByUserName = "مهندس رضایی (HSE)",
+                issuedByUserName = "مهندس محب ایران (HSE)",
                 requiresElectricalLoto = true,
                 electricalLotoStatus = "isolated_and_tagged",
                 electricalTaggedBy = "مهندس البرزی (ناظر برق)",
@@ -693,8 +736,10 @@ object GhadirNeyrizDataSeeder {
                 equipmentName = "SWG 6.6-M10 & M20",
                 issueDate = "1404/10/14",
                 validHours = 8,
+                requestedByUserId = 12,
+                requestedByUserName = "مهندس البرزی",
                 issuedByUserId = 18,
-                issuedByUserName = "مهندس رضایی (HSE)",
+                issuedByUserName = "مهندس محب ایران (HSE)",
                 requiresElectricalLoto = true,
                 electricalLotoStatus = "pending_isolation",
                 electricalTaggedBy = "",

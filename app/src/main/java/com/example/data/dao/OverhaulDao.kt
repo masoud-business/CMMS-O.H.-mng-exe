@@ -258,12 +258,21 @@ interface OverhaulDao {
     @Query("UPDATE notifications SET isRead = 1 WHERE id = :id")
     suspend fun markNotificationRead(id: Long)
 
+    @Query("UPDATE oversight_items SET qcApproved = :qcApproved, qcApprovedBy = :qcApprovedBy, qcApprovalDate = :qcApprovalDate WHERE id = :id")
+    suspend fun updateItemQcStatus(id: Long, qcApproved: Boolean, qcApprovedBy: String, qcApprovalDate: String)
+
+    @Query("UPDATE oversight_items SET requiresTechnicalInspection = :requiresInspection WHERE id = :id")
+    suspend fun updateItemRequiresQc(id: Long, requiresInspection: Boolean)
+
     // --- Safety & HSE Work Permits (پرمیت‌های ایمنی و LOTO) ---
     @Query("SELECT * FROM safety_permits ORDER BY id DESC")
     fun getAllSafetyPermits(): Flow<List<SafetyPermitEntity>>
 
     @Query("SELECT * FROM safety_permits WHERE oversightId = :oversightId ORDER BY id DESC")
     fun getSafetyPermitsForOversight(oversightId: Long): Flow<List<SafetyPermitEntity>>
+
+    @Query("SELECT * FROM safety_permits")
+    suspend fun getAllSafetyPermitsDirect(): List<SafetyPermitEntity>
 
     @Query("SELECT * FROM safety_permits WHERE itemId = :itemId LIMIT 1")
     fun getSafetyPermitForItem(itemId: Long): Flow<SafetyPermitEntity?>
@@ -289,9 +298,15 @@ interface OverhaulDao {
     @Query("UPDATE safety_permits SET status = :status WHERE id = :id")
     suspend fun updateSafetyPermitStatus(id: Long, status: String)
 
+    @Query("UPDATE safety_permits SET status = :status, stopReason = :stopReason, stopDetails = :stopDetails WHERE id = :id")
+    suspend fun updateSafetyPermitSuspension(id: Long, status: String, stopReason: String, stopDetails: String)
+
     @Query("UPDATE safety_permits SET electricalLotoStatus = :status, electricalTaggedBy = :taggedBy WHERE id = :id")
     suspend fun updateElectricalLotoStatus(id: Long, status: String, taggedBy: String)
 
     @Query("DELETE FROM safety_permits WHERE id = :id")
     suspend fun deleteSafetyPermitById(id: Long)
+
+    @Query("UPDATE procurement_requests SET status = :status, unitHeadApproved = :unitApproved, unitHeadApprovedBy = :unitBy, projectManagerApproved = :pmApproved, projectManagerApprovedBy = :pmBy, warehouseLocation = :warehouse, supplyDate = :supplyDate WHERE id = :id")
+    suspend fun updateProcurementPipeline(id: Long, status: String, unitApproved: Boolean, unitBy: String?, pmApproved: Boolean, pmBy: String?, warehouse: String, supplyDate: String?)
 }

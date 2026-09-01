@@ -1309,7 +1309,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         val user = _currentUser.value ?: return
         viewModelScope.launch {
-            val result = service.updateProcurementStatus(user, requestId, newStatus, rejectionReason)
+            val result = service.fulfillProcurementByCommercial(user, requestId, newStatus, "", rejectionReason)
             handleServiceResult(result)
         }
     }
@@ -1416,27 +1416,94 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _importPreview.value = null
     }
 
-    // --- عملیات پرمیت‌های ایمنی HSE و ایزولاسیون LOTO ---
-    fun issueSafetyPermit(permit: SafetyPermitEntity) {
+    // --- عملیات تایید بازرسی فنی (QC / مهندس خاکی) ---
+    fun approveQcInspection(itemId: Long) {
+        val user = _currentUser.value ?: return
         viewModelScope.launch {
-            dao.insertSafetyPermit(permit)
-            _uiMessage.value = UiMessage("پرمیت ایمنی شماره ${permit.permitNumber} با موفقیت صادر گردید.")
+            val result = service.approveQcInspection(user, itemId)
+            handleServiceResult(result)
+        }
+    }
 
-            val user = _currentUser.value
-            dao.insertAuditLog(
-                AuditLogEntity(
-                    entityType = "SAFETY_PERMIT",
-                    entityId = permit.itemId,
-                    action = "PERMIT_ISSUED",
-                    performedByUserId = user?.id ?: 0L,
-                    performedByUserName = user?.name ?: "سرپرست ایمنی",
-                    performedByUserRole = user?.role ?: "hse",
-                    beforeStateJson = "",
-                    afterStateJson = "شماره پرمیت: ${permit.permitNumber} | نوع: ${permit.permitType} | واحد: ${permit.executiveUnit}",
-                    remarks = "صدور پرمیت کارگاهی توسط واحد ایمنی و بهداشت (HSE)",
-                    timestamp = "1404/10/14"
-                )
+    // --- عملیات زنجیره تامین و بازرگانی (مهندس بازرگان و تایید دو مرحله‌ای) ---
+    fun approveProcurementByUnitHead(requestId: Long) {
+        val user = _currentUser.value ?: return
+        viewModelScope.launch {
+            val result = service.approveProcurementByUnitHead(user, requestId)
+            handleServiceResult(result)
+        }
+    }
+
+    fun approveProcurementByProjectManager(requestId: Long) {
+        val user = _currentUser.value ?: return
+        viewModelScope.launch {
+            val result = service.approveProcurementByProjectManager(user, requestId)
+            handleServiceResult(result)
+        }
+    }
+
+    fun fulfillProcurementByCommercial(
+        requestId: Long,
+        status: String,
+        warehouseLocation: String = "",
+        rejectionReason: String? = null
+    ) {
+        val user = _currentUser.value ?: return
+        viewModelScope.launch {
+            val result = service.fulfillProcurementByCommercial(user, requestId, status, warehouseLocation, rejectionReason)
+            handleServiceResult(result)
+        }
+    }
+
+    // --- عملیات پرمیت‌های ایمنی HSE و ایزولاسیون LOTO (مهندس محب ایران) ---
+    fun requestSafetyPermit(permit: SafetyPermitEntity) {
+        val user = _currentUser.value ?: return
+        viewModelScope.launch {
+            val result = service.requestSafetyPermit(user, permit)
+            handleServiceResult(result)
+        }
+    }
+
+    fun issueSafetyPermit(
+        permitId: Long,
+        validHours: Int,
+        ppeRequirements: String,
+        gasTestResult: String,
+        safetyPrecautions: String,
+        lotoStatus: String,
+        electricalTaggedBy: String,
+        checklistJson: String = ""
+    ) {
+        val user = _currentUser.value ?: return
+        viewModelScope.launch {
+            val result = service.issueSafetyPermit(
+                user = user,
+                permitId = permitId,
+                validHours = validHours,
+                ppeRequirements = ppeRequirements,
+                gasTestResult = gasTestResult,
+                safetyPrecautions = safetyPrecautions,
+                lotoStatus = lotoStatus,
+                electricalTaggedBy = electricalTaggedBy,
+                checklistJson = checklistJson
             )
+            handleServiceResult(result)
+        }
+    }
+
+    fun suspendSafetyPermit(permitId: Long, stopReason: String, stopDetails: String) {
+        val user = _currentUser.value ?: return
+        viewModelScope.launch {
+            val result = service.suspendSafetyPermit(user, permitId, stopReason, stopDetails)
+            handleServiceResult(result)
+        }
+    }
+
+    fun resumeSafetyPermit(permitId: Long) {
+        val user = _currentUser.value ?: return
+        viewModelScope.launch {
+            val result = service.resumeSafetyPermit(user, permitId)
+            handleServiceResult(result)
         }
     }
 

@@ -9,9 +9,12 @@ import androidx.room.PrimaryKey
  * 1. کاربران سیستم (Users)
  * نقش‌ها:
  * - admin: مدیر ارشد اورهال
- * - planner: برنامه‌ریز اجرایی (دسترسی کامل به برنامه، ویرایش، خروجی/ورودی MSP و تسویه روزانه)
- * - supervisor: ناظر و سرپرست اجرایی (ثبت درصد پیشرفت، تعداد نفرات، ساعات اجرا و موانع)
- * - unit_head: مدیر و رئیس واحد اجرایی (داشبورد و شاخص‌های تحلیلی واحد مربوطه)
+ * - planner: برنامه‌ریز اجرایی
+ * - supervisor: ناظر و سرپرست اجرایی
+ * - unit_head: مدیر و رئیس واحد اجرایی
+ * - hse: سرپرست و کارشناس ایمنی و بهداشت (مهندس محب ایران)
+ * - commercial: نماینده واحد بازرگانی و خرید کالا (مهندس بازرگان)
+ * - qc: واحد بازرسی فنی و کنترل کیفیت
  */
 @Entity(tableName = "users")
 data class UserEntity(
@@ -21,8 +24,8 @@ data class UserEntity(
     val password: String = "1234",
     val name: String,
     val email: String,
-    val role: String, // "admin", "planner", "supervisor", "unit_head"
-    val unit: String? = null, // "مکانیک", "برق", "ابزار دقیق", "نسوز", "اتوماسیون", "حمل مواد", "سیالات و آب"
+    val role: String, // "admin", "planner", "supervisor", "unit_head", "hse", "commercial", "qc"
+    val unit: String? = null, // "مکانیک", "برق", "ابزاردقیق و اتوماسیون", "نسوز", "انرژی و سیالات", "بازرسی فنی", "HSE و ایمنی", "بازرگانی و تامین کالا"
     val siteId: String = "GHADIR_NEYRIZ",
     val isActive: Boolean = true
 )
@@ -88,7 +91,7 @@ data class OversightItemEntity(
     val title: String, // نام فعالیت اجرایی
     val parentItemId: Long? = null, // شناسه فعالیت والد جهت ساختار درختی
     val outlineLevel: Int = 1, // سطح سلسله‌مراتب (1 تا 6)
-    val executiveUnit: String, // واحد تعمیراتی: «مکانیک»، «برق»، «ابزاردقیق»، «نسوز»، «انرژی و سیالات»، «بازرسی فنی»
+    val executiveUnit: String, // واحد تعمیراتی: «مکانیک»، «برق»، «ابزاردقیق و اتوماسیون»، «نسوز»، «انرژی و سیالات»، «بازرسی فنی»
     val generalArea: String = "", // ناحیه اصلی: «Core Area»، «MHU»، «WTP»
     val executionLocation: String = "", // محل دقیق اجرا: «Furnace Area»، «Pump House»، «Clarifier»، «Day Bin»
     val equipmentName: String = "", // نام تجهیز صنعتی: «Furnace charge hopper»، «Compressor»، «Clarifier»
@@ -104,6 +107,10 @@ data class OversightItemEntity(
     val lastUpdatedDate: String = "",
     val notes: String = "",
     val issues: String = "",
+    val requiresTechnicalInspection: Boolean = false, // نیاز به تایید بازرسی فنی (حداکثر تا ۹۵٪ بدون تاییدیه QC)
+    val qcApproved: Boolean = false, // تایید نهایی بازرسی فنی
+    val qcApprovedBy: String = "", // نام تایید کننده بازرسی فنی (مهندس خاکی)
+    val qcApprovalDate: String = "", // تاریخ تایید بازرسی فنی
     val active: Boolean = true,
     val siteId: String = "GHADIR_NEYRIZ"
 )
@@ -291,7 +298,9 @@ data class SessionDecisionEntity(
 )
 
 /**
- * 8. درخواست‌های خرید و پیمانکار (Procurement Requests)
+ * 8. درخواست‌های خرید، قطعات یدکی و متریال (Procurement Requests - فرآیند بازرگانی با حضور مهندس بازرگان)
+ * چرخه تایید:
+ * ثبت درخواست توسط سرپرست با کد کالا -> تایید رئیس واحد اجرایی -> تایید مدیر پروژه -> خرید توسط مهندس بازرگان -> اعلام موجودی در انبار همراه با آلارم
  */
 @Entity(
     tableName = "procurement_requests",
@@ -308,19 +317,26 @@ data class SessionDecisionEntity(
 data class ProcurementRequestEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val itemId: Long,
+    val itemId: Long? = null, // شناسه فعالیت WBS (اختیاری برای خریدهای عمومی)
     val sessionId: Long? = null,
-    val title: String,
-    val itemType: String, // "goods", "equipment", "contractor_service"
-    val quantity: String = "1 عدد",
-    val estimatedCost: String = "",
-    val status: String = "requested", // "requested", "approved", "ordered", "received", "rejected"
+    val materialCode: String = "", // کد متریال و قطعه (الزامی - مثال: MAT-HYD-5021)
+    val title: String, // نام قطعه، تجهیز یا متریال درخواستی
+    val requestingUnit: String = "مکانیک", // واحد متقاضی: مکانیک، برق، ابزاردقیق، نسوز و...
+    val itemType: String = "goods", // "goods", "spare_part", "consumable", "contractor_service"
+    val quantity: String = "1 عدد", // مقدار / تعداد بدون نیاز به برآورد قیمت توسط مجری
+    val estimatedCost: String = "", // در صورت نیاز توسط بازرگانی تکمیل می‌شود
+    val status: String = "requested", // "requested", "unit_head_approved", "pm_approved", "in_procurement", "supplied_available", "rejected"
     val requestedByUserId: Long,
     val requestedByUserName: String,
-    val approvedByUserId: Long? = null,
-    val approvedByUserName: String? = null,
+    val unitHeadApproved: Boolean = false,
+    val unitHeadApprovedBy: String? = null,
+    val projectManagerApproved: Boolean = false,
+    val projectManagerApprovedBy: String? = null,
+    val commercialRepName: String = "مهندس بازرگان (واحد بازرگانی)", // نماینده بازرگانی
+    val warehouseLocation: String = "", // محل تحویل یا قفسه انبار پس از تامین
     val rejectionReason: String? = null,
     val createdAt: String,
+    val supplyDate: String? = null,
     val siteId: String = "GHADIR_NEYRIZ"
 )
 
@@ -333,7 +349,7 @@ data class AuditLogEntity(
     val id: Long = 0,
     val entityType: String,
     val entityId: Long,
-    val action: String, // "STATUS_CHANGE", "PROGRESS_UPDATE", "CREATE", "UPDATE", "APPROVED", "REJECTED", "MSP_SYNC"
+    val action: String, // "STATUS_CHANGE", "PROGRESS_UPDATE", "CREATE", "UPDATE", "APPROVED", "REJECTED", "MSP_SYNC", "QC_APPROVE", "PERMIT_SUSPEND"
     val performedByUserId: Long,
     val performedByUserName: String,
     val performedByUserRole: String,
@@ -361,7 +377,8 @@ data class NotificationEntity(
 
 /**
  * 11. پرمیت‌های ایمنی کار در کارگاه (Safety & HSE Work Permits)
- * شامل پرمیت‌های کار گرم، کار در ارتفاع، فضای بسته، ایزولاسیون LOTO، کارت قرمز برق و حفاری
+ * با مدیریت مهندس محب ایران (واحد HSE)
+ * شامل پرمیت‌های کار گرم، کار در ارتفاع، فضای بسته، ایزولاسیون LOTO، کارت قرمز برق، حفاری و متفرقه
  */
 @Entity(
     tableName = "safety_permits",
@@ -378,18 +395,21 @@ data class NotificationEntity(
 data class SafetyPermitEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val itemId: Long,
+    val itemId: Long? = null, // کلید تسک WBS یا null برای کارهای متفرقه خارج از لیست
+    val customTaskTitle: String = "", // عنوان فعالیت دستی یا خارج از WBS
     val oversightId: Long = 1,
     val permitNumber: String, // e.g. HSE-1404-101
     val permitType: String, // "کار گرم (Hot Work)", "فضای بسته (Confined Space)", "کار در ارتفاع (Height)", "ایزولاسیون برقی و LOTO", "حفاری (Excavation)", "مجوز عمومی (Cold Work)"
-    val status: String = "issued", // "issued" (صادر شده), "pending" (در انتظار صدور), "suspended" (متوقف شده), "closed" (پایان کار)
-    val executiveUnit: String, // واحد مجری: مکانیک، برق، نسوز، سیالات...
+    val status: String = "issued", // "pending" (در انتظار بررسی HSE), "issued" (صادر شده و معتبر), "suspended" (متوقف با ذکر دلیل استاندارد), "closed" (پایان کار)
+    val executiveUnit: String, // واحد مجری: مکانیک، برق، ابزاردقیق و اتوماسیون، نسوز، سیالات...
     val location: String = "", // موقعیت: Core Area, MHU, WTP...
     val equipmentName: String = "", // تجهیز مرتبط
     val issueDate: String, // تاریخ صدور e.g. 1404/10/14
     val validHours: Int = 8, // مدت اعتبار به ساعت
-    val issuedByUserId: Long,
-    val issuedByUserName: String, // e.g. مهندس رضایی (HSE)
+    val requestedByUserId: Long = 0L,
+    val requestedByUserName: String = "",
+    val issuedByUserId: Long = 0L,
+    val issuedByUserName: String = "مهندس محب ایران (HSE)", // کارشناس ارشد ایمنی
     val requiresElectricalLoto: Boolean = false, // نیاز به کارت قرمز و قفل LOTO برق
     val electricalLotoStatus: String = "not_required", // "not_required", "pending_isolation", "isolated_and_tagged", "energized"
     val electricalTaggedBy: String = "", // تایید کننده واحد برق
@@ -398,7 +418,10 @@ data class SafetyPermitEntity(
     val requiresScaffoldingTag: Boolean = false, // نیاز به تگ داربست
     val fireWatchRequired: Boolean = false, // دیده‌بان آتش
     val safetyPrecautions: String = "", // اقدامات کنترلی و الزامات HSE
-    val ppeRequirements: String = "کفش ایمنی، کلاه ایمنی، دستکش کار", // تجهیزات حفاظت فردی
+    val ppeRequirements: String = "کفش ایمنی، کلاه ایمنی، عینک حفاظتی، دستکش کار", // تجهیزات حفاظت فردی
+    val stopReason: String = "", // دلیل استاندارد توقف پرمیت
+    val stopDetails: String = "", // توضیحات تکمیلی توقف پرمیت
+    val checklistResultsJson: String = "", // نتایج چک لیست بازرسی ایمنی
     val createdAt: String = "",
     val siteId: String = "GHADIR_NEYRIZ"
 )
