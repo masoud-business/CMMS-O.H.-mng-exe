@@ -309,4 +309,22 @@ interface OverhaulDao {
 
     @Query("UPDATE procurement_requests SET status = :status, unitHeadApproved = :unitApproved, unitHeadApprovedBy = :unitBy, projectManagerApproved = :pmApproved, projectManagerApprovedBy = :pmBy, warehouseLocation = :warehouse, supplyDate = :supplyDate WHERE id = :id")
     suspend fun updateProcurementPipeline(id: Long, status: String, unitApproved: Boolean, unitBy: String?, pmApproved: Boolean, pmBy: String?, warehouse: String, supplyDate: String?)
+
+    // ==========================================
+    // 12. DIGITAL SIGNATURES & HIERARCHY
+    // ==========================================
+    @Query("SELECT * FROM digital_signatures WHERE documentType = :docType AND documentId = :docId ORDER BY stepOrder ASC")
+    fun getSignaturesForDocument(docType: String, docId: Long): Flow<List<DigitalSignatureEntity>>
+
+    @Query("SELECT * FROM digital_signatures WHERE documentType = :docType AND documentId = :docId ORDER BY stepOrder ASC")
+    suspend fun getSignaturesForDocumentDirect(docType: String, docId: Long): List<DigitalSignatureEntity>
+
+    @Query("SELECT * FROM digital_signatures WHERE documentType = :docType AND documentId = :docId AND stepOrder = :step LIMIT 1")
+    suspend fun getSignatureForStep(docType: String, docId: Long, step: Int): DigitalSignatureEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDigitalSignature(signature: DigitalSignatureEntity): Long
+
+    @Query("DELETE FROM digital_signatures WHERE documentType = :docType AND documentId = :docId")
+    suspend fun deleteSignaturesForDocument(docType: String, docId: Long)
 }

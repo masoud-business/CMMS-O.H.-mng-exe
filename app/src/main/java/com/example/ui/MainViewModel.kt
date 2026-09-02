@@ -10,6 +10,7 @@ import com.example.data.db.GhadirNeyrizDataSeeder
 import com.example.data.entity.*
 import com.example.data.importer.MsProjectImporter
 import com.example.data.importer.ParsedImportPreview
+import com.example.data.service.DigitalSignatureService
 import com.example.data.service.OverhaulService
 import com.example.data.service.ServiceResult
 import com.example.ui.theme.AppFontScale
@@ -200,6 +201,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val db = AppDatabase.getDatabase(application, viewModelScope)
     private val dao: OverhaulDao = db.overhaulDao()
     private val service = OverhaulService(dao)
+    val digitalSignatureService = DigitalSignatureService(dao)
     private val importer = MsProjectImporter()
 
     // 1. احراز هویت و ذخیره نشست کاربر (Authentication & Session Persistence)
@@ -1503,6 +1505,59 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val user = _currentUser.value ?: return
         viewModelScope.launch {
             val result = service.resumeSafetyPermit(user, permitId)
+            handleServiceResult(result)
+        }
+    }
+
+    fun approvePermitByUnitHead(permitId: Long) {
+        val user = _currentUser.value ?: return
+        viewModelScope.launch {
+            val result = service.approvePermitByUnitHead(user, permitId)
+            handleServiceResult(result)
+        }
+    }
+
+    fun recordGasTest(permitId: Long, o2: String, co: String, lel: String) {
+        val user = _currentUser.value ?: return
+        viewModelScope.launch {
+            val result = service.recordGasTest(user, permitId, o2, co, lel)
+            handleServiceResult(result)
+        }
+    }
+
+    fun extendSafetyPermit(permitId: Long, additionalHours: Int) {
+        val user = _currentUser.value ?: return
+        viewModelScope.launch {
+            val result = service.extendSafetyPermit(user, permitId, additionalHours)
+            handleServiceResult(result)
+        }
+    }
+
+    fun getSignaturesFlow(docType: String, docId: Long): Flow<List<DigitalSignatureEntity>> {
+        return digitalSignatureService.getSignaturesFlow(docType, docId)
+    }
+
+    fun signDocumentWithDynamicToken(
+        documentType: String,
+        documentId: Long,
+        stepOrder: Int,
+        enteredToken: String,
+        generatedToken: String,
+        expiryTimestamp: Long,
+        remarks: String
+    ) {
+        val user = _currentUser.value ?: return
+        viewModelScope.launch {
+            val result = digitalSignatureService.signDocumentWithDynamicToken(
+                user = user,
+                documentType = documentType,
+                documentId = documentId,
+                stepOrder = stepOrder,
+                enteredToken = enteredToken,
+                generatedToken = generatedToken,
+                tokenExpiryTimestamp = expiryTimestamp,
+                remarks = remarks
+            )
             handleServiceResult(result)
         }
     }

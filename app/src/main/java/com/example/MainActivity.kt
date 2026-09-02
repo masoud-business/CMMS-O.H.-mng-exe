@@ -328,11 +328,18 @@ fun OverhaulCoordinationApp(viewModel: MainViewModel) {
                     currentUser = currentUser,
                     onIssuePermit = { viewModel.requestSafetyPermit(it) },
                     onRequestPermit = { viewModel.requestSafetyPermit(it) },
+                    onApproveUnitHead = { viewModel.approvePermitByUnitHead(it) },
+                    onRecordGasTest = { id, o2, co, lel -> viewModel.recordGasTest(id, o2, co, lel) },
+                    onExtendPermit = { id, hours -> viewModel.extendSafetyPermit(id, hours) },
                     onSuspendPermit = { id, reason, details -> viewModel.suspendSafetyPermit(id, reason, details) },
                     onResumePermit = { id -> viewModel.resumeSafetyPermit(id) },
                     onUpdatePermitStatus = { id, status -> viewModel.updateSafetyPermitStatus(id, status) },
                     onUpdateLotoStatus = { id, status, taggedBy -> viewModel.updateElectricalLotoStatus(id, status, taggedBy) },
-                    onDeletePermit = { viewModel.deleteSafetyPermit(it) }
+                    onDeletePermit = { viewModel.deleteSafetyPermit(it) },
+                    digitalSignatureService = viewModel.digitalSignatureService,
+                    onSignDocumentWithToken = { stepOrder, docType, docId, enteredToken, genToken, expiry, remarks ->
+                        viewModel.signDocumentWithDynamicToken(docType, docId, stepOrder, enteredToken, genToken, expiry, remarks)
+                    }
                 )
 
                 AppTab.MSP_SYNC -> MspSyncTab(

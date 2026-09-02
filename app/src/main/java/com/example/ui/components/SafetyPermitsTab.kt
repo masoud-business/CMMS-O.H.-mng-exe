@@ -24,10 +24,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.entity.DigitalSignatureEntity
 import com.example.data.entity.OversightItemEntity
 import com.example.data.entity.SafetyPermitEntity
 import com.example.data.entity.UserEntity
+import com.example.data.service.DigitalSignatureService
 import com.example.ui.theme.*
+import kotlinx.coroutines.delay
+import java.util.Locale
 
 /**
  * تب مدیریت و پایش پرمیت‌های ایمنی و ایزولاسیون کارگاهی (HSE & LOTO Permits Desk)
@@ -40,18 +44,27 @@ fun SafetyPermitsTab(
     currentUser: UserEntity?,
     onIssuePermit: (SafetyPermitEntity) -> Unit,
     onRequestPermit: (SafetyPermitEntity) -> Unit = {},
+    onApproveUnitHead: (Long) -> Unit = {},
+    onRecordGasTest: (Long, String, String, String) -> Unit = { _, _, _, _ -> },
+    onExtendPermit: (Long, Int) -> Unit = { _, _ -> },
     onSuspendPermit: (Long, String, String) -> Unit = { _, _, _ -> },
     onResumePermit: (Long) -> Unit = {},
     onUpdatePermitStatus: (Long, String) -> Unit,
     onUpdateLotoStatus: (Long, String, String) -> Unit,
-    onDeletePermit: (Long) -> Unit
+    onDeletePermit: (Long) -> Unit,
+    digitalSignatureService: DigitalSignatureService? = null,
+    onSignDocumentWithToken: (stepOrder: Int, docType: String, docId: Long, enteredToken: String, genToken: String, expiry: Long, remarks: String) -> Unit = { _, _, _, _, _, _, _ -> }
 ) {
     var selectedFilter by remember { mutableStateOf("all") }
     var searchQuery by remember { mutableStateOf("") }
     var showIssueDialog by remember { mutableStateOf(false) }
+    var showWizardDialog by remember { mutableStateOf(false) }
     var showRequestDialog by remember { mutableStateOf(false) }
     var viewingPermitDetail by remember { mutableStateOf<SafetyPermitEntity?>(null) }
     var permitToSuspend by remember { mutableStateOf<SafetyPermitEntity?>(null) }
+    var permitForGasTest by remember { mutableStateOf<SafetyPermitEntity?>(null) }
+    var permitForExtension by remember { mutableStateOf<SafetyPermitEntity?>(null) }
+    var permitForSigning by remember { mutableStateOf<Pair<SafetyPermitEntity, Int>?>(null) }
     var permitToConfirmAction by remember { mutableStateOf<Pair<SafetyPermitEntity, String>?>(null) }
 
     val filteredPermits = remember(permits, selectedFilter, searchQuery) {
@@ -153,7 +166,7 @@ fun SafetyPermitsTab(
                                 val isHseOrAdmin = currentUser?.role == "hse" || currentUser?.role == "admin" || currentUser?.unit?.contains("ایمنی") == true
                                 if (isHseOrAdmin) {
                                     Button(
-                                        onClick = { showIssueDialog = true },
+                                        onClick = { showWizardDialog = true },
                                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
                                         shape = RoundedCornerShape(8.dp),
                                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
@@ -161,7 +174,7 @@ fun SafetyPermitsTab(
                                     ) {
                                         Icon(Icons.Default.AddModerator, contentDescription = null, modifier = Modifier.size(15.dp))
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("صدور پرمیت", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        Text("صدور پرمیت HSE", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     }
                                 } else {
                                     Button(
@@ -294,6 +307,12 @@ fun SafetyPermitsTab(
                     onClose = { onUpdatePermitStatus(permit.id, "closed") },
                     onConfirmLoto = { taggedBy ->
                         onUpdateLotoStatus(permit.id, "isolated_and_tagged", taggedBy)
+                    },
+                    onApproveUnitHead = { onApproveUnitHead(permit.id) },
+                    onRecordGasTest = { permitForGasTest = permit },
+                    onExtend = { permitForExtension = permit },
+                    onOpenSignatureDialog = { stepOrder ->
+                        permitForSigning = permit to stepOrder
                     }
                 )
             }
@@ -305,6 +324,18 @@ fun SafetyPermitsTab(
     }
 
     // Dialogs
+    if (showWizardDialog) {
+        PermitIssuanceWizardDialog(
+            wbsItems = wbsItems,
+            currentUser = currentUser,
+            onDismiss = { showWizardDialog = false },
+            onConfirm = { newPermit ->
+                onIssuePermit(newPermit)
+                showWizardDialog = false
+            }
+        )
+    }
+
     if (showIssueDialog) {
         IssueSafetyPermitDialog(
             wbsItems = wbsItems,
@@ -340,11 +371,57 @@ fun SafetyPermitsTab(
         )
     }
 
+    permitForGasTest?.let { permit ->
+        RecordGasTestDialog(
+            permit = permit,
+            currentUser = currentUser,
+            onDismiss = { permitForGasTest = null },
+            onConfirm = { o2, co, lel ->
+                onRecordGasTest(permit.id, o2, co, lel)
+                permitForGasTest = null
+            }
+        )
+    }
+
+    permitForExtension?.let { permit ->
+        ExtendSafetyPermitDialog(
+            permit = permit,
+            onDismiss = { permitForExtension = null },
+            onConfirm = { hours ->
+                onExtendPermit(permit.id, hours)
+                permitForExtension = null
+            }
+        )
+    }
+
     viewingPermitDetail?.let { permit ->
         SafetyPermitDetailDialog(
             permit = permit,
+            currentUser = currentUser,
+            digitalSignatureService = digitalSignatureService,
+            onOpenSignDialog = { stepOrder ->
+                permitForSigning = permit to stepOrder
+            },
             onDismiss = { viewingPermitDetail = null }
         )
+    }
+
+    permitForSigning?.let { (permit, stepOrder) ->
+        if (digitalSignatureService != null) {
+            DynamicTokenSignatureDialog(
+                documentType = "safety_permit",
+                documentId = permit.id,
+                documentTitle = "پرمیت ایمنی ${permit.permitNumber} (${permit.equipmentName})",
+                stepOrder = stepOrder,
+                currentUser = currentUser,
+                service = digitalSignatureService,
+                onDismiss = { permitForSigning = null },
+                onConfirmSign = { order, enteredToken, genToken, expiry, remarks ->
+                    onSignDocumentWithToken(order, "safety_permit", permit.id, enteredToken, genToken, expiry, remarks)
+                    permitForSigning = null
+                }
+            )
+        }
     }
 }
 
@@ -366,6 +443,58 @@ private fun HseMiniStatCard(
 }
 
 /**
+ * تایمر زنده شمارش معکوس اعتبار زمانی پرمیت ایمنی (Live Countdown Timer)
+ */
+@Composable
+fun PermitLiveTimer(
+    expiryTimestamp: Long,
+    modifier: Modifier = Modifier
+) {
+    if (expiryTimestamp <= 0L) return
+
+    var currentTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(expiryTimestamp) {
+        while (true) {
+            currentTime = System.currentTimeMillis()
+            delay(1000L)
+        }
+    }
+
+    val diff = expiryTimestamp - currentTime
+    val isExpired = diff <= 0
+    val totalSeconds = if (isExpired) 0L else (diff / 1000L)
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+
+    Surface(
+        shape = RoundedCornerShape(4.dp),
+        color = if (isExpired) Color(0xFFEF4444).copy(alpha = 0.12f) else Color(0xFF059669).copy(alpha = 0.12f),
+        border = BorderStroke(1.dp, if (isExpired) Color(0xFFEF4444).copy(alpha = 0.4f) else Color(0xFF059669).copy(alpha = 0.4f)),
+        modifier = modifier
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+        ) {
+            Icon(
+                imageVector = if (isExpired) Icons.Default.TimerOff else Icons.Default.Timer,
+                contentDescription = null,
+                tint = if (isExpired) Color(0xFFEF4444) else Color(0xFF059669),
+                modifier = Modifier.size(11.dp)
+            )
+            Spacer(modifier = Modifier.width(3.dp))
+            Text(
+                text = if (isExpired) "اعتبار منقضی شد" else String.format(Locale.US, "اعتبار زنده: %02d:%02d:%02d", hours, minutes, seconds),
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isExpired) Color(0xFFEF4444) else Color(0xFF059669)
+            )
+        }
+    }
+}
+
+/**
  * کارت متراکم و بهینه پرمیت ایمنی
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -378,7 +507,11 @@ fun SafetyPermitCard(
     onSuspend: () -> Unit,
     onResume: () -> Unit,
     onClose: () -> Unit,
-    onConfirmLoto: (String) -> Unit
+    onConfirmLoto: (String) -> Unit,
+    onApproveUnitHead: () -> Unit = {},
+    onRecordGasTest: () -> Unit = {},
+    onExtend: () -> Unit = {},
+    onOpenSignatureDialog: (stepOrder: Int) -> Unit = {}
 ) {
     val statusColor = when (permit.status) {
         "issued" -> Color(0xFF10B981) // سبز صادر شده
@@ -481,11 +614,17 @@ fun SafetyPermitCard(
                     )
                 }
 
-                Text(
-                    text = "اعتبار: ${permit.validHours}h | ${permit.issueDate}",
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "اعتبار: ${permit.validHours}h | ${permit.issueDate}",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (permit.expiryTimestamp > 0L && (permit.status == "issued" || permit.status == "extended")) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        PermitLiveTimer(expiryTimestamp = permit.expiryTimestamp)
+                    }
+                }
             }
 
             // Suspended Reason Banner (if applicable)
@@ -521,6 +660,57 @@ fun SafetyPermitCard(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
+                if (permit.unitHeadApproved) {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = Color(0xFF10B981).copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.4f))
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                        ) {
+                            Icon(Icons.Default.Verified, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(11.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text(
+                                text = "تایید رئیس واحد: ${permit.unitHeadApprovedBy.ifBlank { "انجام شد" }}",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF10B981)
+                            )
+                        }
+                    }
+                } else if (permit.status == "requested" || permit.status == "pending") {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = Color(0xFFF59E0B).copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.4f))
+                    ) {
+                        Text(
+                            text = "در انتظار تایید رئیس واحد",
+                            fontSize = 9.sp,
+                            color = Color(0xFFD97706),
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                        )
+                    }
+                }
+
+                if (permit.extensionCount > 0) {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = Color(0xFF8B5CF6).copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, Color(0xFF8B5CF6).copy(alpha = 0.4f))
+                    ) {
+                        Text(
+                            text = "تمدید (${permit.extensionCount} بار)",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF8B5CF6),
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                        )
+                    }
+                }
+
                 if (permit.requiresElectricalLoto) {
                     val isLotoDone = permit.electricalLotoStatus == "isolated_and_tagged"
                     Surface(
@@ -628,6 +818,22 @@ fun SafetyPermitCard(
                         }
                     }
 
+                    // Unit Head approval button
+                    val isUnitHead = currentUser?.role == "unit_head" || currentUser?.role == "admin" || (currentUser?.unit != null && currentUser.unit.contains(permit.executiveUnit))
+                    if (!permit.unitHeadApproved && (permit.status == "requested" || permit.status == "pending") && isUnitHead) {
+                        Button(
+                            onClick = onApproveUnitHead,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.height(26.dp)
+                        ) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(12.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text("تایید واحد", fontSize = 9.sp)
+                        }
+                    }
+
                     val isHseOrAdmin = currentUser?.role == "hse" || currentUser?.role == "admin" || currentUser?.unit?.contains("ایمنی") == true
                     if (isHseOrAdmin) {
                         if (permit.status == "pending" || permit.status == "requested") {
@@ -642,21 +848,43 @@ fun SafetyPermitCard(
                                 Spacer(modifier = Modifier.width(3.dp))
                                 Text("تایید صدور", fontSize = 9.sp)
                             }
-                        } else if (permit.status == "issued") {
+                        } else if (permit.status == "issued" || permit.status == "extended") {
+                            if (permit.requiresGasTest) {
+                                OutlinedButton(
+                                    onClick = onRecordGasTest,
+                                    contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp),
+                                    shape = RoundedCornerShape(6.dp),
+                                    modifier = Modifier.height(26.dp)
+                                ) {
+                                    Icon(Icons.Default.Air, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color(0xFF0284C7))
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                    Text("تست گاز", fontSize = 9.sp, color = Color(0xFF0284C7))
+                                }
+                            }
+                            OutlinedButton(
+                                onClick = onExtend,
+                                contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.height(26.dp)
+                            ) {
+                                Icon(Icons.Default.Update, contentDescription = null, modifier = Modifier.size(12.dp))
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text("تمدید", fontSize = 9.sp)
+                            }
                             OutlinedButton(
                                 onClick = onSuspend,
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444)),
-                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                                contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp),
                                 shape = RoundedCornerShape(6.dp),
                                 modifier = Modifier.height(26.dp)
                             ) {
                                 Icon(Icons.Default.Block, contentDescription = null, modifier = Modifier.size(12.dp))
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Text("توقف ایمنی", fontSize = 9.sp)
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text("توقف", fontSize = 9.sp)
                             }
                             OutlinedButton(
                                 onClick = onClose,
-                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                                contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp),
                                 shape = RoundedCornerShape(6.dp),
                                 modifier = Modifier.height(26.dp)
                             ) {
@@ -675,6 +903,18 @@ fun SafetyPermitCard(
                                 Text("رفع توقف", fontSize = 9.sp)
                             }
                         }
+                    }
+
+                    // Digital signature button
+                    OutlinedButton(
+                        onClick = { onOpenSignatureDialog(1) },
+                        contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.height(26.dp)
+                    ) {
+                        Icon(Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text("امضاء", fontSize = 9.sp, color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
@@ -931,7 +1171,10 @@ fun RequestSafetyPermitDialog(
                         requiresElectricalLoto = requiresElectricalLoto,
                         electricalLotoStatus = if (requiresElectricalLoto) "pending_isolation" else "not_required",
                         requiresGasTest = requiresGasTest,
-                        gasTestResult = if (requiresGasTest) "در انتظار تست واحد ایمنی" else "",
+                        gasTestResultO2 = "",
+                        gasTestResultCO = "",
+                        gasTestResultLEL = "",
+                        expiryTimestamp = 0L,
                         safetyPrecautions = "رعایت کلیه الزامات ایمنی الزامی است.",
                         ppeRequirements = "کفش، کلاه، عینک حفاظتی و دستکش کار",
                         createdAt = "1404/10/14 10:00"
@@ -1191,8 +1434,12 @@ fun IssueSafetyPermitDialog(
                         issuedByUserName = currentUser?.name ?: "سرپرست HSE",
                         requiresElectricalLoto = requiresElectricalLoto,
                         electricalLotoStatus = if (requiresElectricalLoto) "pending_isolation" else "not_required",
+                        expiryTimestamp = System.currentTimeMillis() + (validHours * 3600 * 1000L),
                         requiresGasTest = requiresGasTest,
-                        gasTestResult = if (requiresGasTest) gasTestResult else "",
+                        gasTestResultO2 = if (requiresGasTest) "20.9%" else "",
+                        gasTestResultCO = if (requiresGasTest) "0 ppm" else "",
+                        gasTestResultLEL = if (requiresGasTest) "0%" else "",
+                        gasTesterName = if (requiresGasTest) (currentUser?.name ?: "HSE") else "",
                         requiresScaffoldingTag = requiresScaffoldingTag,
                         fireWatchRequired = fireWatchRequired,
                         safetyPrecautions = safetyPrecautions,
@@ -1215,13 +1462,555 @@ fun IssueSafetyPermitDialog(
 }
 
 /**
- * فرم نمایش جزئیات کامل استاندارد پرمیت ایمنی کارگاهی
+ * دیالوگ ثبت و مانیتورینگ تست گاز محیطی
+ */
+@Composable
+fun RecordGasTestDialog(
+    permit: SafetyPermitEntity,
+    currentUser: UserEntity?,
+    onDismiss: () -> Unit,
+    onConfirm: (o2: String, co: String, lel: String) -> Unit
+) {
+    var o2 by remember { mutableStateOf(permit.gasTestResultO2.ifBlank { "20.9%" }) }
+    var co by remember { mutableStateOf(permit.gasTestResultCO.ifBlank { "0 ppm" }) }
+    var lel by remember { mutableStateOf(permit.gasTestResultLEL.ifBlank { "0%" }) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Air, contentDescription = null, tint = Color(0xFF0284C7))
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text("ثبت رسمی تست گاز محیطی", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text("پرمیت: ${permit.permitNumber} • ${permit.equipmentName}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFF0284C7).copy(alpha = 0.08f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "ثبت توسط: ${currentUser?.name ?: "کارشناس HSE"}\nحدود مجاز استاندارد: O2 بین ۱۹.۵ تا ۲۳.۵ درصد | CO کمتر از ۲۵ ppm | LEL زیر ۱۰ درصد",
+                        fontSize = 9.sp,
+                        color = Color(0xFF0284C7),
+                        modifier = Modifier.padding(8.dp),
+                        lineHeight = 13.sp
+                    )
+                }
+
+                OutlinedTextField(
+                    value = o2,
+                    onValueChange = { o2 = it },
+                    label = { Text("میزان اکسیژن (O2 %)", fontSize = 11.sp) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = co,
+                    onValueChange = { co = it },
+                    label = { Text("منوکسید کربن (CO ppm)", fontSize = 11.sp) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = lel,
+                    onValueChange = { lel = it },
+                    label = { Text("گازهای قابل اشتعال (LEL %)", fontSize = 11.sp) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(o2, co, lel) },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
+            ) {
+                Text("ثبت در سامانه HSE", fontSize = 11.sp)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("انصراف", fontSize = 11.sp) }
+        }
+    )
+}
+
+/**
+ * دیالوگ تمدید ساعت اعتبار پرمیت ایمنی
+ */
+@Composable
+fun ExtendSafetyPermitDialog(
+    permit: SafetyPermitEntity,
+    onDismiss: () -> Unit,
+    onConfirm: (Int) -> Unit
+) {
+    var hours by remember { mutableIntStateOf(8) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Update, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text("تمدید اعتبار پرمیت ایمنی", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text("${permit.permitNumber} • ${permit.equipmentName}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("مدت تمدید اعتبار جدید را انتخاب نمایید:", fontSize = 11.sp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(4, 8, 12, 24).forEach { h ->
+                        FilterChip(
+                            selected = hours == h,
+                            onClick = { hours = h },
+                            label = { Text("$h ساعت", fontSize = 10.sp) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text("اعتبار فعلی: ${permit.validHours} ساعت", fontSize = 10.sp)
+                        Text("دفعات تمدید قبلی: ${permit.extensionCount} بار", fontSize = 10.sp)
+                        Text("مجموع اعتبار پس از تمدید: ${permit.validHours + hours} ساعت", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(hours) }) {
+                Text("تایید تمدید", fontSize = 11.sp)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("انصراف", fontSize = 11.sp) }
+        }
+    )
+}
+
+/**
+ * ویزارد چندمرحله‌ای صدور پرمیت ایمنی (Permit Issuance Wizard)
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PermitIssuanceWizardDialog(
+    wbsItems: List<OversightItemEntity>,
+    currentUser: UserEntity?,
+    onDismiss: () -> Unit,
+    onConfirm: (SafetyPermitEntity) -> Unit
+) {
+    var step by remember { mutableIntStateOf(1) }
+
+    var selectedItemId by remember { mutableStateOf(wbsItems.firstOrNull { it.active }?.id ?: 1L) }
+    val selectedItem = remember(selectedItemId, wbsItems) { wbsItems.firstOrNull { it.id == selectedItemId } }
+
+    var permitType by remember { mutableStateOf("کار گرم (Hot Work)") }
+    var location by remember(selectedItem) { mutableStateOf(selectedItem?.executionLocation ?: "ناحیه کوره احیا") }
+    var equipmentName by remember(selectedItem) { mutableStateOf(selectedItem?.equipmentName ?: "ریفورمر و لوله‌های گاز") }
+    var executiveUnit by remember(selectedItem) { mutableStateOf(selectedItem?.executiveUnit ?: "مکانیک") }
+    var validHours by remember { mutableIntStateOf(8) }
+
+    var requiresElectricalLoto by remember { mutableStateOf(false) }
+    var lotoLockNumber by remember { mutableStateOf("LCK-204") }
+    var requiresGasTest by remember { mutableStateOf(false) }
+    var gasO2 by remember { mutableStateOf("20.9%") }
+    var gasCO by remember { mutableStateOf("0 ppm") }
+    var gasLEL by remember { mutableStateOf("0%") }
+    var requiresScaffoldingTag by remember { mutableStateOf(false) }
+    var fireWatchRequired by remember { mutableStateOf(false) }
+    var safetyPrecautions by remember { mutableStateOf("رعایت حریم ایمنی، استقرار کپسول آتش‌نشانی، تهویه مداوم و ایزولاسیون خطوط الزامی است.") }
+    var ppeRequirements by remember { mutableStateOf("کفش ایمنی، کلاه ایمنی، شیلد جوشکاری، دستکش چرمی و هارنس ایمنی") }
+
+    val randomNum = remember { (100..999).random() }
+    val generatedPermitNo = remember { "HSE-1404-$randomNum" }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = CircleShape,
+                    color = Color(0xFF10B981).copy(alpha = 0.15f),
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(18.dp))
+                    }
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text("ویزارد جامع صدور پرمیت ایمنی اورهال", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text("شماره رسمی: $generatedPermitNo • گام $step از ۳", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 480.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Stepper Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    listOf(
+                        1 to "مشخصات تسک",
+                        2 to "ایزولاسیون و گاز",
+                        3 to "چک‌لیست و صدور"
+                    ).forEach { (sNum, sLabel) ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                shape = CircleShape,
+                                color = if (step >= sNum) Color(0xFF10B981) else MaterialTheme.colorScheme.outlineVariant,
+                                modifier = Modifier.size(20.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text("$sNum", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = sLabel,
+                                fontSize = 9.sp,
+                                fontWeight = if (step == sNum) FontWeight.Bold else FontWeight.Normal,
+                                color = if (step == sNum) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                when (step) {
+                    1 -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text("انتخاب فعالیت WBS:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            var expandedTask by remember { mutableStateOf(false) }
+                            ExposedDropdownMenuBox(
+                                expanded = expandedTask,
+                                onExpandedChange = { expandedTask = !expandedTask }
+                            ) {
+                                OutlinedTextField(
+                                    value = selectedItem?.let { "${it.wbsCode} - ${it.title.take(35)}" } ?: "انتخاب تسک",
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedTask) },
+                                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                    textStyle = MaterialTheme.typography.bodySmall
+                                )
+                                ExposedDropdownMenu(
+                                    expanded = expandedTask,
+                                    onDismissRequest = { expandedTask = false }
+                                ) {
+                                    wbsItems.take(50).forEach { item ->
+                                        DropdownMenuItem(
+                                            text = { Text("${item.wbsCode} • ${item.title}", fontSize = 10.sp) },
+                                            onClick = {
+                                                selectedItemId = item.id
+                                                executiveUnit = item.executiveUnit
+                                                equipmentName = item.equipmentName
+                                                location = item.executionLocation
+                                                expandedTask = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
+                            Text("نوع پرمیت:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            val pTypes = listOf("کار گرم (Hot Work)", "فضای بسته (Confined Space)", "کار در ارتفاع (Height)", "ایزولاسیون مکانیکی و LOTO", "حفاری و خاکبرداری", "مجوز کار سرد عمومی")
+                            var expandedType by remember { mutableStateOf(false) }
+                            ExposedDropdownMenuBox(expanded = expandedType, onExpandedChange = { expandedType = !expandedType }) {
+                                OutlinedTextField(
+                                    value = permitType,
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedType) },
+                                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                    textStyle = MaterialTheme.typography.bodySmall
+                                )
+                                ExposedDropdownMenu(expanded = expandedType, onDismissRequest = { expandedType = false }) {
+                                    pTypes.forEach { t ->
+                                        DropdownMenuItem(text = { Text(t, fontSize = 11.sp) }, onClick = { permitType = t; expandedType = false })
+                                    }
+                                }
+                            }
+
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                OutlinedTextField(
+                                    value = executiveUnit,
+                                    onValueChange = { executiveUnit = it },
+                                    label = { Text("واحد مجری", fontSize = 10.sp) },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                                OutlinedTextField(
+                                    value = equipmentName,
+                                    onValueChange = { equipmentName = it },
+                                    label = { Text("نام تجهیز", fontSize = 10.sp) },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                            }
+
+                            OutlinedTextField(
+                                value = location,
+                                onValueChange = { location = it },
+                                label = { Text("موقعیت کارگاهی", fontSize = 10.sp) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+
+                            Text("مدت اعتبار اولیه:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                listOf(4, 8, 12, 24).forEach { h ->
+                                    FilterChip(
+                                        selected = validHours == h,
+                                        onClick = { validHours = h },
+                                        label = { Text("$h ساعت", fontSize = 10.sp) },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    2 -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFFDC2626).copy(alpha = 0.08f),
+                                border = BorderStroke(1.dp, Color(0xFFDC2626).copy(alpha = 0.3f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.Bolt, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("ایزولاسیون برقی (Electrical LOTO)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFFDC2626))
+                                        }
+                                        Switch(checked = requiresElectricalLoto, onCheckedChange = { requiresElectricalLoto = it })
+                                    }
+                                    if (requiresElectricalLoto) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        OutlinedTextField(
+                                            value = lotoLockNumber,
+                                            onValueChange = { lotoLockNumber = it },
+                                            label = { Text("شماره قفل و تگ LOTO", fontSize = 10.sp) },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            singleLine = true
+                                        )
+                                    }
+                                }
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFF0284C7).copy(alpha = 0.08f),
+                                border = BorderStroke(1.dp, Color(0xFF0284C7).copy(alpha = 0.3f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.Air, contentDescription = null, tint = Color(0xFF0284C7), modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("سنجش و تست گاز محیطی", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0284C7))
+                                        }
+                                        Switch(checked = requiresGasTest, onCheckedChange = { requiresGasTest = it })
+                                    }
+                                    if (requiresGasTest) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            OutlinedTextField(value = gasO2, onValueChange = { gasO2 = it }, label = { Text("O2 %", fontSize = 9.sp) }, modifier = Modifier.weight(1f), singleLine = true)
+                                            OutlinedTextField(value = gasCO, onValueChange = { gasCO = it }, label = { Text("CO ppm", fontSize = 9.sp) }, modifier = Modifier.weight(1f), singleLine = true)
+                                            OutlinedTextField(value = gasLEL, onValueChange = { gasLEL = it }, label = { Text("LEL %", fontSize = 9.sp) }, modifier = Modifier.weight(1f), singleLine = true)
+                                        }
+                                    }
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("نیاز به تگ سبز داربست بندی", fontSize = 11.sp)
+                                Switch(checked = requiresScaffoldingTag, onCheckedChange = { requiresScaffoldingTag = it })
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("استقرار دیده‌بان آتش (Fire Watch)", fontSize = 11.sp)
+                                Switch(checked = fireWatchRequired, onCheckedChange = { fireWatchRequired = it })
+                            }
+                        }
+                    }
+                    3 -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = safetyPrecautions,
+                                onValueChange = { safetyPrecautions = it },
+                                label = { Text("دستورالعمل‌ها و تدابیر احتیاطی HSE", fontSize = 10.sp) },
+                                modifier = Modifier.fillMaxWidth(),
+                                maxLines = 3
+                            )
+
+                            OutlinedTextField(
+                                value = ppeRequirements,
+                                onValueChange = { ppeRequirements = it },
+                                label = { Text("تجهیزات حفاظت فردی الزامی (PPE)", fontSize = 10.sp) },
+                                modifier = Modifier.fillMaxWidth(),
+                                maxLines = 2
+                            )
+
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp)) {
+                                    Text("خلاصه نهایی پرمیت قبل از صدور:", fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                                    Text("شماره: $generatedPermitNo • نوع: $permitType", fontSize = 9.sp)
+                                    Text("تجهیز: $equipmentName • موقعیت: $location", fontSize = 9.sp)
+                                    Text("اعتبار: $validHours ساعت • تاییدکننده: ${currentUser?.name ?: "سرپرست HSE"}", fontSize = 9.sp, color = MaterialTheme.colorScheme.primary)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (step < 3) {
+                Button(
+                    onClick = { step++ },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Text("گام بعدی", fontSize = 11.sp)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(Icons.Default.NavigateNext, contentDescription = null, modifier = Modifier.size(14.dp))
+                }
+            } else {
+                Button(
+                    onClick = {
+                        val expiry = System.currentTimeMillis() + (validHours * 3600 * 1000L)
+                        val permit = SafetyPermitEntity(
+                            itemId = selectedItemId,
+                            oversightId = selectedItem?.oversightId ?: 1L,
+                            permitNumber = generatedPermitNo,
+                            permitType = permitType,
+                            status = "issued",
+                            executiveUnit = executiveUnit,
+                            location = location,
+                            equipmentName = equipmentName,
+                            issueDate = "1404/10/14",
+                            validHours = validHours,
+                            expiryTimestamp = expiry,
+                            issuedByUserId = currentUser?.id ?: 18L,
+                            issuedByUserName = currentUser?.name ?: "سرپرست HSE",
+                            requiresElectricalLoto = requiresElectricalLoto,
+                            electricalLotoStatus = if (requiresElectricalLoto) "pending_isolation" else "not_required",
+                            lotoLockNumbersJson = if (requiresElectricalLoto) "[\"$lotoLockNumber\"]" else "",
+                            requiresGasTest = requiresGasTest,
+                            gasTestResultO2 = if (requiresGasTest) gasO2 else "",
+                            gasTestResultCO = if (requiresGasTest) gasCO else "",
+                            gasTestResultLEL = if (requiresGasTest) gasLEL else "",
+                            gasTesterName = if (requiresGasTest) (currentUser?.name ?: "HSE") else "",
+                            requiresScaffoldingTag = requiresScaffoldingTag,
+                            fireWatchRequired = fireWatchRequired,
+                            safetyPrecautions = safetyPrecautions,
+                            ppeRequirements = ppeRequirements,
+                            createdAt = "1404/10/14 10:00"
+                        )
+                        onConfirm(permit)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                ) {
+                    Icon(Icons.Default.Verified, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("صدور رسمی پرمیت HSE", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        },
+        dismissButton = {
+            if (step > 1) {
+                OutlinedButton(onClick = { step-- }) {
+                    Icon(Icons.Default.NavigateBefore, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("گام قبلی", fontSize = 11.sp)
+                }
+            } else {
+                TextButton(onClick = onDismiss) {
+                    Text("انصراف", fontSize = 11.sp)
+                }
+            }
+        }
+    )
+}
+
+/**
+ * فرم نمایش جزئیات کامل استاندارد پرمیت ایمنی کارگاهی با ماژول امضای دیجیتال
  */
 @Composable
 fun SafetyPermitDetailDialog(
     permit: SafetyPermitEntity,
+    currentUser: UserEntity? = null,
+    digitalSignatureService: DigitalSignatureService? = null,
+    onOpenSignDialog: ((stepOrder: Int) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
+    val signatures by produceState<List<DigitalSignatureEntity>>(initialValue = emptyList(), permit.id) {
+        digitalSignatureService?.getSignaturesFlow("safety_permit", permit.id)?.collect {
+            value = it
+        }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -1233,7 +2022,7 @@ fun SafetyPermitDetailDialog(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = Color(0xFF10B981))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("فرم استاندارد پرمیت ایمنی", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text("فرم رسمی پرمیت ایمنی کارگاه", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 }
                 Surface(
                     shape = RoundedCornerShape(6.dp),
@@ -1256,6 +2045,7 @@ fun SafetyPermitDetailDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Specs Card
                 Surface(
                     shape = RoundedCornerShape(10.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -1279,15 +2069,42 @@ fun SafetyPermitDetailDialog(
                             Text("تاریخ صدور: ${permit.issueDate}", fontSize = 10.sp)
                             Text("مدت اعتبار: ${permit.validHours} ساعت", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary)
                         }
+                        if (permit.expiryTimestamp > 0L) {
+                            Spacer(modifier = Modifier.height(3.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("وضعیت اعتبار زمانی: ", fontSize = 10.sp)
+                                PermitLiveTimer(expiryTimestamp = permit.expiryTimestamp)
+                            }
+                        }
                         if (permit.issuedByUserName.isNotBlank()) {
                             Spacer(modifier = Modifier.height(3.dp))
                             Text("صادرکننده: ${permit.issuedByUserName}", fontSize = 10.sp)
+                        }
+                        if (permit.unitHeadApproved) {
+                            Spacer(modifier = Modifier.height(3.dp))
+                            Text("تایید فنی واحد: ${permit.unitHeadApprovedBy}", fontSize = 10.sp, color = Color(0xFF10B981), fontWeight = FontWeight.Bold)
+                        }
+                        if (permit.extensionCount > 0) {
+                            Spacer(modifier = Modifier.height(3.dp))
+                            Text("تمدید اعتبار: ${permit.extensionCount} بار توسط ${permit.extendedByUserName}", fontSize = 10.sp, color = Color(0xFF8B5CF6))
                         }
                         if (!permit.stopReason.isNullOrBlank()) {
                             Spacer(modifier = Modifier.height(4.dp))
                             Text("علت توقف: ${permit.stopReason} (${permit.stopDetails.orEmpty()})", fontSize = 10.sp, color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
                         }
                     }
+                }
+
+                // Digital Signature Hierarchy Module Card
+                if (digitalSignatureService != null && onOpenSignDialog != null) {
+                    DigitalSignatureHierarchyCard(
+                        documentType = "safety_permit",
+                        documentId = permit.id,
+                        documentTitle = "پرمیت ایمنی ${permit.permitNumber} (${permit.equipmentName})",
+                        signatures = signatures,
+                        currentUser = currentUser,
+                        onOpenSignDialog = onOpenSignDialog
+                    )
                 }
 
                 if (permit.requiresElectricalLoto) {
@@ -1306,7 +2123,7 @@ fun SafetyPermitDetailDialog(
                             Spacer(modifier = Modifier.height(4.dp))
                             val isIsolated = permit.electricalLotoStatus == "isolated_and_tagged"
                             Text(
-                                text = if (isIsolated) "تغذیه الکتریکی به طور کامل قطع، فیدر قفل و کارت قرمز با تایید ${permit.electricalTaggedBy} نصب گردید." else "هشدار: تا زمان قطع برق و تایید واحد برق، هرگونه کار ممنوع است.",
+                                text = if (isIsolated) "تغذیه الکتریکی قطع، فیدر قفل و کارت قرمز با تایید ${permit.electricalTaggedBy} نصب گردید." else "هشدار: تا زمان قطع برق و تایید واحد برق، هرگونه کار ممنوع است.",
                                 fontSize = 10.sp
                             )
                         }
@@ -1324,6 +2141,9 @@ fun SafetyPermitDetailDialog(
                             Text("نتایج پایش و تست گاز محیطی:", fontWeight = FontWeight.Bold, fontSize = 10.sp, color = Color(0xFF0284C7))
                             Spacer(modifier = Modifier.height(3.dp))
                             Text(permit.gasTestResult, fontSize = 10.sp)
+                            if (permit.gasTesterName.isNotBlank()) {
+                                Text("تست‌کننده: ${permit.gasTesterName}", fontSize = 9.sp, color = Color(0xFF0284C7))
+                            }
                         }
                     }
                 }

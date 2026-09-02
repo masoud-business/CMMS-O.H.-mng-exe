@@ -956,14 +956,15 @@ class OverhaulService(private val dao: OverhaulDao) {
         }
 
         val todayDate = getCurrentDate()
+        val now = System.currentTimeMillis()
         val updated = existing.copy(
             status = "issued",
             issueDate = todayDate,
             validHours = validHours,
+            expiryTimestamp = now + (validHours * 3600 * 1000L),
             issuedByUserId = user.id,
             issuedByUserName = "${user.name} (HSE)",
             ppeRequirements = ppeRequirements,
-            gasTestResult = gasTestResult,
             safetyPrecautions = safetyPrecautions,
             electricalLotoStatus = lotoStatus,
             electricalTaggedBy = electricalTaggedBy,
@@ -989,6 +990,102 @@ class OverhaulService(private val dao: OverhaulDao) {
         )
 
         return ServiceResult.Success(Unit, "پرمیت ایمنی با موفقیت صادر و تایید گردید.")
+    }
+
+    // ۱. تایید اولیه توسط رئیس واحد متقاضی تعمیرات
+    suspend fun approvePermitByUnitHead(user: UserEntity, permitId: Long): ServiceResult<Unit> {
+        val existing = dao.getSafetyPermitById(permitId) ?: return ServiceResult.Error("مجوز یافت نشد.", code = 404)
+        if (user.role != "unit_head" && user.role != "admin") {
+            return ServiceResult.Error("فقط رئیس واحد مجاز به تایید اولیه پرمیت است.", code = 403)
+        }
+
+        val updated = existing.copy(
+            status = "unit_approved",
+            unitHeadApproved = true,
+            unitHeadApprovedBy = "${user.name} (${user.unit ?: "واحد"})"
+        )
+        dao.updateSafetyPermit(updated)
+
+        dao.insertAuditLog(
+            AuditLogEntity(
+                entityType = "safety_permit",
+                entityId = permitId,
+                action = "UNIT_HEAD_APPROVE",
+                performedByUserId = user.id,
+                performedByUserName = user.name,
+                performedByUserRole = user.role,
+                beforeStateJson = "{\"status\": \"${existing.status}\"}",
+                afterStateJson = "{\"status\": \"unit_approved\", \"approvedBy\": \"${user.name}\"}",
+                remarks = "تایید اولیه پرمیت توسط رئیس واحد (${user.name})",
+                timestamp = getCurrentTimestamp()
+            )
+        )
+        return ServiceResult.Success(Unit, "درخواست پرمیت توسط رئیس واحد تایید و به کارتابل HSE ارسال شد.")
+    }
+
+    // ۲. ثبت رسمی تست گاز کارگاه قبل از ورود به فضاهای بسته یا کار گرم
+    suspend fun recordGasTest(user: UserEntity, permitId: Long, o2: String, co: String, lel: String): ServiceResult<Unit> {
+        if (user.role != "hse" && user.role != "admin") return ServiceResult.Error("عدم دسترسی کارشناس ایمنی", code = 403)
+        val existing = dao.getSafetyPermitById(permitId) ?: return ServiceResult.Error("مجوز یافت نشد.", code = 404)
+
+        val updated = existing.copy(
+            gasTestResultO2 = o2,
+            gasTestResultCO = co,
+            gasTestResultLEL = lel,
+            gasTesterName = user.name,
+            lastGasTestTimestamp = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+        )
+        dao.updateSafetyPermit(updated)
+
+        dao.insertAuditLog(
+            AuditLogEntity(
+                entityType = "safety_permit",
+                entityId = permitId,
+                action = "RECORD_GAS_TEST",
+                performedByUserId = user.id,
+                performedByUserName = user.name,
+                performedByUserRole = user.role,
+                beforeStateJson = "{}",
+                afterStateJson = "{\"O2\": \"$o2\", \"CO\": \"$co\", \"LEL\": \"$lel\"}",
+                remarks = "ثبت نتایج سنجش گاز محیطی توسط ${user.name}",
+                timestamp = getCurrentTimestamp()
+            )
+        )
+        return ServiceResult.Success(Unit, "نتایج سنجش گاز با موفقیت در پرمیت ثبت شد.")
+    }
+
+    // ۳. تمدید مجوز کار (Extension) برای نوبت کاری بعدی
+    suspend fun extendSafetyPermit(user: UserEntity, permitId: Long, additionalHours: Int): ServiceResult<Unit> {
+        val existing = dao.getSafetyPermitById(permitId) ?: return ServiceResult.Error("مجوز یافت نشد.", code = 404)
+        if (user.role != "hse" && user.role != "admin") return ServiceResult.Error("تمدید پرمیت فقط توسط HSE امکان‌پذیر است.", code = 403)
+        if (existing.status != "issued" && existing.status != "extended") return ServiceResult.Error("پرمیت فعال نیست.")
+
+        val baseExpiry = if (existing.expiryTimestamp > System.currentTimeMillis()) existing.expiryTimestamp else System.currentTimeMillis()
+        val newExpiry = baseExpiry + (additionalHours * 3600 * 1000L)
+        val updated = existing.copy(
+            status = "extended",
+            validHours = existing.validHours + additionalHours,
+            expiryTimestamp = newExpiry,
+            extensionCount = existing.extensionCount + 1,
+            extendedByUserName = user.name
+        )
+        dao.updateSafetyPermit(updated)
+
+        dao.insertAuditLog(
+            AuditLogEntity(
+                entityType = "safety_permit",
+                entityId = permitId,
+                action = "EXTEND_PERMIT",
+                performedByUserId = user.id,
+                performedByUserName = user.name,
+                performedByUserRole = user.role,
+                beforeStateJson = "{\"validHours\": ${existing.validHours}, \"extensionCount\": ${existing.extensionCount}}",
+                afterStateJson = "{\"validHours\": ${updated.validHours}, \"extensionCount\": ${updated.extensionCount}}",
+                remarks = "تمدید پرمیت ایمنی برای $additionalHours ساعت بیشتر توسط ${user.name}",
+                timestamp = getCurrentTimestamp()
+            )
+        )
+        return ServiceResult.Success(Unit, "پرمیت ایمنی برای $additionalHours ساعت دیگر تمدید شد.")
     }
 
     suspend fun suspendSafetyPermit(

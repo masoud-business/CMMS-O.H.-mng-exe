@@ -2,6 +2,7 @@ package com.example.data.entity
 
 import androidx.room.Entity
 import androidx.room.ForeignKey
+import androidx.room.Ignore
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
@@ -395,33 +396,97 @@ data class NotificationEntity(
 data class SafetyPermitEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val itemId: Long? = null, // کلید تسک WBS یا null برای کارهای متفرقه خارج از لیست
-    val customTaskTitle: String = "", // عنوان فعالیت دستی یا خارج از WBS
+    val itemId: Long? = null,
+    val customTaskTitle: String = "",
     val oversightId: Long = 1,
-    val permitNumber: String, // e.g. HSE-1404-101
-    val permitType: String, // "کار گرم (Hot Work)", "فضای بسته (Confined Space)", "کار در ارتفاع (Height)", "ایزولاسیون برقی و LOTO", "حفاری (Excavation)", "مجوز عمومی (Cold Work)"
-    val status: String = "issued", // "pending" (در انتظار بررسی HSE), "issued" (صادر شده و معتبر), "suspended" (متوقف با ذکر دلیل استاندارد), "closed" (پایان کار)
-    val executiveUnit: String, // واحد مجری: مکانیک، برق، ابزاردقیق و اتوماسیون، نسوز، سیالات...
-    val location: String = "", // موقعیت: Core Area, MHU, WTP...
-    val equipmentName: String = "", // تجهیز مرتبط
-    val issueDate: String, // تاریخ صدور e.g. 1404/10/14
-    val validHours: Int = 8, // مدت اعتبار به ساعت
+    val permitNumber: String,
+    val permitType: String, // "Hot Work", "Confined Space", "Height Work", "High Voltage"
+    val status: String = "requested", // requested, unit_approved, issued, suspended, extended, closed
+    val executiveUnit: String,
+    val location: String = "",
+    val equipmentName: String = "",
+    val requestDate: String = "1404/10/14",
+    val issueDate: String? = null,
+    val validHours: Int = 8,
+    val expiryTimestamp: Long = 0L, // زمان دقیق انقضا برای محاسبه تایمر معکوس
+
+    // فیلدهای امضا و تایید سلسله مراتبی
     val requestedByUserId: Long = 0L,
     val requestedByUserName: String = "",
+    val unitHeadApproved: Boolean = false,
+    val unitHeadApprovedBy: String = "",
     val issuedByUserId: Long = 0L,
-    val issuedByUserName: String = "مهندس محب ایران (HSE)", // کارشناس ارشد ایمنی
-    val requiresElectricalLoto: Boolean = false, // نیاز به کارت قرمز و قفل LOTO برق
-    val electricalLotoStatus: String = "not_required", // "not_required", "pending_isolation", "isolated_and_tagged", "energized"
-    val electricalTaggedBy: String = "", // تایید کننده واحد برق
-    val requiresGasTest: Boolean = false, // نیاز به تست گاز
-    val gasTestResult: String = "", // نتیجه سنجش O2, CO, LEL
-    val requiresScaffoldingTag: Boolean = false, // نیاز به تگ داربست
-    val fireWatchRequired: Boolean = false, // دیده‌بان آتش
-    val safetyPrecautions: String = "", // اقدامات کنترلی و الزامات HSE
-    val ppeRequirements: String = "کفش ایمنی، کلاه ایمنی، عینک حفاظتی، دستکش کار", // تجهیزات حفاظت فردی
-    val stopReason: String = "", // دلیل استاندارد توقف پرمیت
-    val stopDetails: String = "", // توضیحات تکمیلی توقف پرمیت
-    val checklistResultsJson: String = "", // نتایج چک لیست بازرسی ایمنی
+    val issuedByUserName: String = "",
+
+    // بخش ایزولاسیون و LOTO حرفه‌ای
+    val requiresElectricalLoto: Boolean = false,
+    val electricalLotoStatus: String = "not_required", // not_required, pending, isolated, energized
+    val electricalTaggedBy: String = "",
+    val lotoLockNumbersJson: String = "", // ذخیره شماره قفل‌ها به صورت آرایه جیسون
+
+    // بخش سنجش گاز محیطی (Gas Test)
+    val requiresGasTest: Boolean = false,
+    val gasTestResultO2: String = "",
+    val gasTestResultCO: String = "",
+    val gasTestResultLEL: String = "",
+    val gasTesterName: String = "",
+    val lastGasTestTimestamp: String = "",
+
+    // مستندات و چک‌لیست پویای بازرسی میدانی
+    val requiresScaffoldingTag: Boolean = false,
+    val fireWatchRequired: Boolean = false,
+    val safetyPrecautions: String = "",
+    val ppeRequirements: String = "",
+    val photoAttachmentsJson: String = "", // پیوست تصاویر خطرات کارگاه
+
+    // مدیریت تمدید و تعلیق پرمیت
+    val extensionCount: Int = 0,
+    val extendedByUserName: String = "",
+    val stopReason: String = "",
+    val stopDetails: String = "",
+    val checklistResultsJson: String = "",
     val createdAt: String = "",
+    val siteId: String = "GHADIR_NEYRIZ"
+) {
+    @get:Ignore
+    val gasTestResult: String
+        get() = if (gasTestResultO2.isNotBlank() || gasTestResultCO.isNotBlank() || gasTestResultLEL.isNotBlank()) {
+            listOfNotNull(
+                if (gasTestResultO2.isNotBlank()) "O2: $gasTestResultO2" else null,
+                if (gasTestResultCO.isNotBlank()) "CO: $gasTestResultCO" else null,
+                if (gasTestResultLEL.isNotBlank()) "LEL: $gasTestResultLEL" else null
+            ).joinToString(" | ")
+        } else ""
+}
+
+/**
+ * 12. امضاهای دیجیتال چندمرحله‌ای با رمز پویا (Multi-Step Digital Signatures with Dynamic Token)
+ * شامل سلسله مراتب:
+ * مرحله ۱: ثبت درخواست توسط ناظر اجرایی (Supervisor)
+ * مرحله ۲: تایید رئیس واحد متقاضی (Unit Head)
+ * مرحله ۳: صدور پرمیت توسط سرپرست HSE (مهندس محب ایران)
+ * مرحله ۴: تایید نظارتی مدیر ارشد اورهال (Plant / Overhaul Director)
+ */
+@Entity(
+    tableName = "digital_signatures",
+    indices = [Index("documentType"), Index("documentId"), Index("signerUserId")]
+)
+data class DigitalSignatureEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val documentType: String, // "safety_permit", "wbs_task", "qa_qc"
+    val documentId: Long,
+    val stepOrder: Int, // 1: Supervisor, 2: Unit Head, 3: HSE, 4: Overhaul Director
+    val stepTitle: String,
+    val signerUserId: Long,
+    val signerName: String,
+    val signerRole: String,
+    val signerUnit: String = "",
+    val signatureStatus: String = "signed", // "signed", "rejected", "pending"
+    val dynamicToken: String, // رمز پویا (OTP) ۶ رقمی
+    val tokenGeneratedAt: String = "",
+    val signedAt: String,
+    val deviceFingerprint: String = "سامانه اورهال نایریز - تبلت صنعتی",
+    val comments: String = "",
     val siteId: String = "GHADIR_NEYRIZ"
 )
